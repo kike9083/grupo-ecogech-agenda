@@ -309,6 +309,28 @@ interface StepOutcome {
   changed: boolean;
   fallback: boolean;
   detail: string;
+  /** A step that did NOT converge — reported and reflected in the exit code. */
+  failed?: boolean;
+}
+
+/**
+ * Appwrite 1.8.1 validates `default` as mandatory on `updateEnumAttribute`,
+ * even though these enums are `required` and carry none. Verified live against
+ * this project: the payload without it answers
+ * `400 general_argument_invalid "Param \"default\" is not optional."`, the same
+ * payload with `default` added passes route validation.
+ *
+ * `null` goes first so nothing gains a default; the first element is the last
+ * resort for a handler that refuses an explicit null.
+ */
+function enumPatchPayloads(
+  elements: string[],
+  required: boolean,
+): Array<Record<string, unknown>> {
+  return [
+    { elements, required, default: null },
+    { elements, required, default: elements[0] },
+  ];
 }
 
 async function createTypeEnum(): Promise<ApiResult> {
@@ -350,12 +372,15 @@ async function ensureNoteEnum(): Promise<StepOutcome> {
     };
   }
 
-  const updated = await api('PATCH', '/attributes/enum/type', {
-    elements: ['task', 'request', 'note'],
-    required: true,
-  });
+  let updated: ApiResult | null = null;
+  for (const payload of enumPatchPayloads(['task', 'request', 'note'], true)) {
+    updated = await api('PATCH', '/attributes/enum/type', payload);
+    if (updated.status === 200 || updated.status === 202) {
+      break;
+    }
+  }
 
-  if (updated.status === 200 || updated.status === 202) {
+  if (updated !== null && (updated.status === 200 || updated.status === 202)) {
     await waitForAttribute('type');
     return {
       step: 'enum.type',
@@ -365,7 +390,9 @@ async function ensureNoteEnum(): Promise<StepOutcome> {
     };
   }
 
-  console.warn(`[probe A] updateEnumAttribute failed: ${describe(updated)}`);
+  console.warn(
+    `[probe A] updateEnumAttribute failed: ${updated === null ? 'no response' : describe(updated)}`,
+  );
   console.warn('[probe A] applying data-safe fallback: delete + recreate enum');
 
   const deleted = await api('DELETE', '/attributes/type');
@@ -575,35 +602,32 @@ async function ensureAttachmentAttribute(
       return 'unchanged';
     }
 
-    // Appwrite 1.8.1 validates `default` as mandatory on this route even
-    // though `kind` is required and carries none — verified live: the payload
-    // the first draft sent answers 400 `Param "default" is not optional.`,
-    // while the same payload plus `default` passes route validation. Try null
-    // first so nothing gains a default, then the first element.
-    //
-    // Never throw from here: a failed reconcile must not abort the run and
-    // hide every attribute and index that follows it (and unlike the note
-    // collection, deleting `kind` would wipe the value on every attachment).
+    // A failed reconcile must not abort the run and hide every attribute and
+    // index that follows it (and unlike the note collection, deleting `kind`
+    // would wipe the value on every attachment row). Transport errors and the
+    // availability poll are folded in too, so this path really never throws —
+    // the failure is reported instead and `main` exits non-zero.
+    let failure: string | null = null;
     let updated: ApiResult | null = null;
-    for (const payload of [
-      { elements: wanted, required: body.required === true, default: null },
-      { elements: wanted, required: body.required === true, default: wanted[0] },
-    ]) {
-      updated = await request(`${attachmentsBaseUrl}${path}/${key}`, 'PATCH', payload);
-      if (updated.status === 200 || updated.status === 202) {
-        break;
+    try {
+      for (const payload of enumPatchPayloads(wanted, body.required === true)) {
+        updated = await request(`${attachmentsBaseUrl}${path}/${key}`, 'PATCH', payload);
+        if (updated.status === 200 || updated.status === 202) {
+          break;
+        }
       }
+
+      if (updated !== null && (updated.status === 200 || updated.status === 202)) {
+        await waitForAttachmentsAttribute(key);
+        return 'updated';
+      }
+      failure = updated === null ? 'no response' : describe(updated);
+    } catch (error: unknown) {
+      failure = error instanceof Error ? error.message : String(error);
     }
 
-    if (updated === null || (updated.status !== 200 && updated.status !== 202)) {
-      console.warn(
-        `[provision] could not reconcile enum ${key}: ${updated === null ? 'no response' : describe(updated)}`,
-      );
-      return 'failed';
-    }
-
-    await waitForAttachmentsAttribute(key);
-    return 'updated';
+    console.warn(`[provision] could not reconcile enum ${key}: ${failure}`);
+    return 'failed';
   }
 
   const created = await request(`${attachmentsBaseUrl}${path}`, 'POST', body);
@@ -696,13 +720,17 @@ async function ensureAttachmentsCollection(): Promise<StepOutcome> {
   return {
     step: 'collection.attachments',
     changed: changes.length > 0 || createdCollection,
-    fallback: failed.length > 0,
-    detail:
-      failed.length > 0
-        ? `could not reconcile ${failed.join(', ')} — remaining attributes and indexes were still ensured`
-        : changes.length > 0
-          ? `applied ${changes.join(', ')}`
-          : 'attachments schema already present — skipped',
+    failed: failed.length > 0,
+    fallback: false,
+    detail: [
+      failed.length > 0 ? `could not reconcile ${failed.join(', ')}` : null,
+      changes.length > 0 ? `applied ${changes.join(', ')}` : null,
+      failed.length === 0 && changes.length === 0
+        ? 'attachments schema already present — skipped'
+        : null,
+    ]
+      .filter((part): part is string => part !== null)
+      .join('; '),
   };
 }
 
@@ -718,12 +746,28 @@ async function main(): Promise<void> {
 
   console.log('\nProvisioning summary:');
   for (const outcome of outcomes) {
-    const marker = outcome.fallback ? 'FALLBACK' : outcome.changed ? 'APPLIED' : 'SKIP';
+    const marker = outcome.failed
+      ? 'FAILED'
+      : outcome.fallback
+        ? 'FALLBACK'
+        : outcome.changed
+          ? 'APPLIED'
+          : 'SKIP';
     console.log(`  [${marker}] ${outcome.step} — ${outcome.detail}`);
   }
 
   const usedFallback = outcomes.some((outcome) => outcome.fallback);
+  const failedSteps = outcomes.filter((outcome) => outcome.failed === true);
   console.log(`\nDone. Fallbacks used: ${usedFallback ? 'yes' : 'no'}`);
+
+  // A step that did not converge must not look like success to whatever
+  // wrapper runs this script, but every other step still has to run first.
+  if (failedSteps.length > 0) {
+    console.error(
+      `\nFAILED: ${failedSteps.map((outcome) => outcome.step).join(', ')} — the schema was not fully reconciled.`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 main().catch((error: unknown) => {
