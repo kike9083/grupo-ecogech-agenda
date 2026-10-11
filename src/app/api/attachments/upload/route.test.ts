@@ -1,14 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Attachment, AttachmentRecord } from '@/lib/appwrite/attachments';
 import { MAX_ATTACHMENT_BYTES } from '@/lib/attachments';
 import { performUpload, type UploadInput, type UploadResult } from '@/lib/attachment-flow';
 import {
+  POST,
   gateUploadRequest,
   handleUpload,
   readGatedUploadBody,
   rejectOversizedBody,
   type UploadRouteDeps,
 } from './route';
+
+// `POST` resolves identity through this module, and `cookies()` throws when it
+// is called outside a request scope — so the handler tests inject a fixed
+// "no session" and assert against the gates alone.
+vi.mock('@/lib/appwrite/session', () => ({
+  getCurrentUser: async () => null,
+  getSessionSecret: async () => null,
+  isAdmin: async () => false,
+}));
 
 /**
  * RED seam for PR6 task 6.4 (spec `attachments` → "Oversized or wrong type"):
@@ -74,6 +84,23 @@ const validFile = {
 
 async function body(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
+}
+
+/** Reading this body throws, so anything that parses first fails the test. */
+function poisonRequest(contentLength?: string): Request {
+  const poison = new ReadableStream({
+    pull() {
+      throw new Error('the body was read before the gates ran');
+    },
+  });
+  return new Request('http://localhost/api/attachments/upload', {
+    method: 'POST',
+    ...(contentLength === undefined
+      ? {}
+      : { headers: { 'content-length': contentLength } }),
+    body: poison,
+    duplex: 'half',
+  } as RequestInit);
 }
 
 describe('handleUpload (spec attachments → Attachment upload)', () => {
@@ -208,26 +235,6 @@ describe('rejectOversizedBody (pre-parse size gate)', () => {
 });
 
 describe('gateUploadRequest (identity and size are judged before the body)', () => {
-  /** Reading this body throws, so a gate that parses first fails the test. */
-  function poisonBody(): ReadableStream {
-    return new ReadableStream({
-      pull() {
-        throw new Error('the body was read before the gates ran');
-      },
-    });
-  }
-
-  function poisonRequest(contentLength?: string): Request {
-    return new Request('http://localhost/api/attachments/upload', {
-      method: 'POST',
-      ...(contentLength === undefined
-        ? {}
-        : { headers: { 'content-length': contentLength } }),
-      body: poisonBody(),
-      duplex: 'half',
-    } as RequestInit);
-  }
-
   it('answers 401 without a session and never reads the body', async () => {
     const response = gateUploadRequest(false, poisonRequest());
 
@@ -278,5 +285,27 @@ describe('gateUploadRequest (identity and size are judged before the body)', () 
     );
     expect('form' in parsed).toBe(true);
     expect('form' in parsed && parsed.form.get('recordId')).toBe('rec-1');
+  });
+});
+
+/**
+ * The helper's own ordering is pinned above; this pins that the real handler
+ * still routes through it. Without this, moving `request.formData()` back into
+ * `POST` — say, to read `recordId` earlier — passes every other test while
+ * reintroducing the 30 MB buffer before the gates.
+ */
+describe('POST (the handler, not just the helper)', () => {
+  it('refuses an absent session without ever reading the body', async () => {
+    const response = await POST(poisonRequest());
+
+    expect(response.status).toBe(401);
+    expect(String((await body(response)).error)).toMatch(/sesi/i);
+  });
+
+  it('answers an oversized body without touching it or the session', async () => {
+    const response = await POST(poisonRequest(String(MAX_ATTACHMENT_BYTES * 2)));
+
+    expect(response.status).toBe(400);
+    expect(String((await body(response)).error)).toMatch(/demasiado grande/i);
   });
 });

@@ -62,7 +62,10 @@ export async function handleUpload(
 ): Promise<Response> {
   const user = await deps.getSessionUser();
   if (user === null) {
-    return json({ error: ATTACHMENT_FAILURE_MESSAGES['session-expired'] }, 401);
+    return json(
+      { error: ATTACHMENT_FAILURE_MESSAGES['session-expired'] },
+      attachmentFailureStatus('session-expired'),
+    );
   }
 
   if (input.file === null || input.recordId === '') {
@@ -119,9 +122,11 @@ export function rejectOversizedBody(contentLength: string | null): Response | nu
 /**
  * Everything that must run BEFORE `request.formData()`.
  *
- * The size gate is header-only and needs no network, so it answers a clearly
- * oversized body before we pay the round-trip that resolves the session. The
- * session gate then runs before the parser materialises the whole multipart
+ * `POST` hoists the size gate above its `getCurrentUser()` call, because that
+ * resolution is an `account.get()` round-trip to Appwrite: the header-only
+ * check costs nothing and must not sit behind a network hop. The gate is
+ * repeated here so `readGatedUploadBody` stays safe on its own, and the
+ * session gate still runs before the parser materialises the whole multipart
  * into Node memory — a stale or absent cookie would otherwise buffer 30 MB to
  * answer 401. Whatever comes after this call is read too late.
  *
@@ -159,6 +164,14 @@ export async function readGatedUploadBody(
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // Cheapest gate first: header-only, no network. Running it above
+  // `getCurrentUser()` is what keeps an oversized upload from paying an
+  // `account.get()` round-trip just to be told the body is too large.
+  const oversized = rejectOversizedBody(request.headers.get('content-length'));
+  if (oversized !== null) {
+    return oversized;
+  }
+
   const user = await getCurrentUser();
   const secret = await getSessionSecret();
   const sessionUser = user === null || secret === null ? null : user;
