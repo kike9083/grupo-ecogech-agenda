@@ -17,12 +17,21 @@ import type { TaskOwner } from '@/lib/validation/task';
  *
  * Branches:
  * - local validation failure → Spanish field errors, NO data-layer call
- * - success → `NOTE_SUCCESS_REDIRECT`
+ * - success → `noteCreatedRedirect(id)` (the edit route, whose gallery and
+ *   attach form need the id that only exists after the write)
  * - `DomainError.session-expired` → `SESSION_EXPIRED_REDIRECT`
  * - other `DomainError.kind` → form-level message, values preserved
  */
 
-export const NOTE_SUCCESS_REDIRECT = '/?noted=1';
+/**
+ * Landing page after a successful create. Sending the user to the edit route
+ * instead of the list is what makes the attach form reachable in the same
+ * session: `AttachmentForm` needs a `recordId`, and the list's `?noted=1`
+ * banner cannot carry one.
+ */
+export function noteCreatedRedirect(recordId: string): string {
+  return `/editar?id=${encodeURIComponent(recordId)}&created=1`;
+}
 
 export const SESSION_EXPIRED_REDIRECT = '/login?error=expired';
 
@@ -90,8 +99,9 @@ export async function performCreateNote(
   };
   const bodyText = plainTextFromHtml(value.bodyHtml);
 
+  let created: Task;
   try {
-    await deps.createNote(buildNoteRecord(value, owner, bodyText));
+    created = await deps.createNote(buildNoteRecord(value, owner, bodyText));
   } catch (error) {
     const domain = toDomainError(error);
     if (domain.kind === 'session-expired') {
@@ -106,5 +116,5 @@ export async function performCreateNote(
     return;
   }
 
-  deps.redirect(NOTE_SUCCESS_REDIRECT);
+  deps.redirect(noteCreatedRedirect(created.$id));
 }

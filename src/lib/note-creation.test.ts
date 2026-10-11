@@ -9,8 +9,8 @@ import type { Task } from '@/lib/appwrite/tasks';
 import type { NoteRecord } from '@/lib/validation/note';
 import {
   INITIAL_NOTE_STATE,
-  NOTE_SUCCESS_REDIRECT,
   SESSION_EXPIRED_REDIRECT,
+  noteCreatedRedirect,
   performCreateNote,
   type CreateNoteDeps,
   type CreateNoteState,
@@ -139,7 +139,9 @@ describe('performCreateNote (spec note-capture → Note creation)', () => {
       'write("user:user-123")',
     ]);
     expect(deps.invalid).toEqual([]);
-    expect(deps.redirects).toEqual([NOTE_SUCCESS_REDIRECT]);
+    expect(deps.redirects).toEqual([
+      noteCreatedRedirect(fake.createCalls[0].documentId),
+    ]);
   });
 
   it('stores an undated note with the empty date sentinel and body-only search text', async () => {
@@ -156,7 +158,9 @@ describe('performCreateNote (spec note-capture → Note creation)', () => {
     expect(call.data.date).toBe('');
     expect(call.data.title).toBe('');
     expect(call.data.searchText).toBe(' Recordatorio suelto');
-    expect(deps.redirects).toEqual([NOTE_SUCCESS_REDIRECT]);
+    expect(deps.redirects).toEqual([
+      noteCreatedRedirect(fake.createCalls[0].documentId),
+    ]);
   });
 
   it('stores a cleared editor document as an empty body', async () => {
@@ -171,7 +175,9 @@ describe('performCreateNote (spec note-capture → Note creation)', () => {
 
     expect(fake.createCalls[0].data.bodyHtml).toBe('');
     expect(fake.createCalls[0].data.searchText).toBe('Vacía ');
-    expect(deps.redirects).toEqual([NOTE_SUCCESS_REDIRECT]);
+    expect(deps.redirects).toEqual([
+      noteCreatedRedirect(fake.createCalls[0].documentId),
+    ]);
   });
 
   it('blocks an invalid draft with Spanish field errors and never writes', async () => {

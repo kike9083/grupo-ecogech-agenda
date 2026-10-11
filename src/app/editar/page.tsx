@@ -49,6 +49,10 @@ export default async function EditarPage({
   if (documentId === '') {
     notFound();
   }
+  // The create flow lands here so the attach form is reachable in the same
+  // session; the marker keeps the confirmation the list used to show.
+  const rawCreated = Array.isArray(params.created) ? params.created[0] : params.created;
+  const justCreated = rawCreated === '1';
 
   const admin = await isAdmin();
   const env = loadEnv();
@@ -105,6 +109,12 @@ export default async function EditarPage({
       }
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        {justCreated ? (
+          <p role="status" className="banner banner-success">
+            Nota creada correctamente.
+          </p>
+        ) : null}
+
         {task.type === 'note' ? (
           // Notes have their own form: TaskForm demands an HH:MM a note never
           // stores and cannot carry bodyHtml, so routing one here blocked the

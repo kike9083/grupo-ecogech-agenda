@@ -30,7 +30,6 @@ describe('parseHomeQuery', () => {
       cursor: '',
       searching: false,
       created: false,
-      noted: false,
       updated: false,
       deleted: false,
     });
@@ -46,7 +45,6 @@ describe('parseHomeQuery', () => {
       cursor: 'doc-20',
       searching: true,
       created: true,
-      noted: false,
       updated: false,
       deleted: false,
     });
@@ -60,7 +58,6 @@ describe('parseHomeQuery', () => {
       cursor: '',
       searching: false,
       created: false,
-      noted: false,
       updated: false,
       deleted: false,
     });
@@ -74,7 +71,6 @@ describe('parseHomeQuery', () => {
       cursor: 'a',
       searching: true,
       created: false,
-      noted: false,
       updated: false,
       deleted: false,
     });
@@ -86,11 +82,6 @@ describe('parseHomeQuery', () => {
     expect(parseHomeQuery({ created: 'yes' }).created).toBe(false);
   });
 
-  it('only flags the note banner for the exact noted=1 marker', () => {
-    expect(parseHomeQuery({ noted: '1' }).noted).toBe(true);
-    expect(parseHomeQuery({ noted: '0' }).noted).toBe(false);
-    expect(parseHomeQuery({}).noted).toBe(false);
-  });
 
   it('only flags the edit banner for the exact updated=1 marker', () => {
     expect(parseHomeQuery({ updated: '1' }).updated).toBe(true);
