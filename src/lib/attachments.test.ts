@@ -306,3 +306,40 @@ describe('provisioner schema (a fresh environment matches the one in production)
     expect(MAX_ATTACHMENT_BYTES).toBe(30_000_000);
   });
 });
+
+/**
+ * Round-5/6 CRITICAL: Appwrite 1.8.1 rejects `updateEnumAttribute` without
+ * `default` (live probe: `400 general_argument_invalid "Param \"default\" is
+ * not optional."`), which used to abort the whole run before any later step.
+ * `enumPatchPayloads` is the only place that shapes those PATCH bodies, and the
+ * probe-A delete+recreate fallback destroys the stored `type` on every task —
+ * so both are pinned here from the source rather than through a live PATCH.
+ */
+describe('enumPatchPayloads (the 1.8.1 mandatory `default` stays applied)', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('../../scripts/provision-notebook.ts', import.meta.url)),
+    'utf8',
+  );
+
+  it('shapes both PATCH attempts with an explicit `default` key', () => {
+    const fn = /function enumPatchPayloads[\s\S]*?\n}/.exec(source)?.[0] ?? '';
+
+    expect(fn, 'enumPatchPayloads must remain extractable from source').not.toBe('');
+    expect(fn).toContain('default: null');
+    expect(fn).toContain('default: elements[0]');
+  });
+
+  it('routes both probe-A PATCH sites through that payload builder', () => {
+    expect(source).toMatch(
+      /enumPatchPayloads\(\['task', 'request', 'note'\], true\)/,
+    );
+    expect(source).toMatch(/enumPatchPayloads\(wanted, body\.required === true\)/);
+  });
+
+  it('gates the destructive probe-A fallback on the documented 400 only', () => {
+    expect(source).toContain('function isMissingDefaultError');
+    expect(source).toMatch(
+      /if \(updated === null \|\| !isMissingDefaultError\(updated\)\)/,
+    );
+  });
+});

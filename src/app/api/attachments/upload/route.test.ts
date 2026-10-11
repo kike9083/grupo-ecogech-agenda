@@ -13,11 +13,16 @@ import {
 
 // `POST` resolves identity through this module, and `cookies()` throws when it
 // is called outside a request scope — so the handler tests inject a fixed
-// "no session" and assert against the gates alone.
+// "no session". The mock is also what pins the cost the size-gate hoist
+// removes: an oversized body must never reach `account.get()`.
+const { mockGetCurrentUser } = vi.hoisted(() => ({
+  mockGetCurrentUser: vi.fn(async () => null),
+}));
+
 vi.mock('@/lib/appwrite/session', () => ({
-  getCurrentUser: async () => null,
-  getSessionSecret: async () => null,
-  isAdmin: async () => false,
+  getCurrentUser: mockGetCurrentUser,
+  getSessionSecret: vi.fn(async () => null),
+  isAdmin: vi.fn(async () => false),
 }));
 
 /**
@@ -295,17 +300,27 @@ describe('gateUploadRequest (identity and size are judged before the body)', () 
  * reintroducing the 30 MB buffer before the gates.
  */
 describe('POST (the handler, not just the helper)', () => {
-  it('refuses an absent session without ever reading the body', async () => {
+  it('resolves the session, then refuses without ever reading the body', async () => {
+    mockGetCurrentUser.mockClear();
+
     const response = await POST(poisonRequest());
 
     expect(response.status).toBe(401);
     expect(String((await body(response)).error)).toMatch(/sesi/i);
+    expect(mockGetCurrentUser).toHaveBeenCalled();
   });
 
+  /**
+   * The response is the same either way, so only the call count can detect a
+   * revert of the hoist: an oversized body must never pay `account.get()`.
+   */
   it('answers an oversized body without touching it or the session', async () => {
+    mockGetCurrentUser.mockClear();
+
     const response = await POST(poisonRequest(String(MAX_ATTACHMENT_BYTES * 2)));
 
     expect(response.status).toBe(400);
     expect(String((await body(response)).error)).toMatch(/demasiado grande/i);
+    expect(mockGetCurrentUser).not.toHaveBeenCalled();
   });
 });

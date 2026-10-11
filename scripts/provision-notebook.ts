@@ -14,13 +14,21 @@
  *      mirror `tasks` (collection `create("users")` + `read("team:admins")`,
  *      document `read/write("user:<owner>")`).
  *
- * Both enum probes are unverified on self-hosted Appwrite 1.8.1, so each has a
- * documented data-safe fallback (the collection is empty at apply time):
- *   - probe A fails → delete + recreate the enum attribute
- *   - probe B fails → add a `createdAt` ISO string attribute + index on it
+ * Enum PATCHes carry `default` because Appwrite 1.8.1 rejects an
+ * `updateEnumAttribute` without it — verified live against this project: the
+ * payload without `default` answers
+ * `400 general_argument_invalid "Param \"default\" is not optional."`, the
+ * same payload with `default` passes route validation. Probe B's update path
+ * has never been exercised on 1.8.1 and keeps its fallback:
+ *   - probe A fails with that 400, delete + recreate the enum attribute.
+ *     That drops the stored `type` on every existing task, so it is entered
+ *     ONLY for the route rejection it was designed around, which is what a
+ *     fresh `agenda.tasks` hits. Any other status is a failed step.
+ *   - probe B fails, add a `createdAt` ISO string attribute + index on it
  *
  * Re-running is a no-op: every step first reads current state and skips when
- * the change is already present. Existing documents are never touched.
+ * the change is already present. The additive steps never touch existing
+ * documents; the probe A fallback above is the single exception.
  *
  * Usage: `node scripts/provision-notebook.ts`
  * Reads `APPWRITE_ENDPOINT` / `APPWRITE_PROJECT_ID` / `APPWRITE_API_KEY` /
@@ -333,6 +341,21 @@ function enumPatchPayloads(
   ];
 }
 
+/**
+ * The one rejection the probe A delete+recreate fallback exists to work
+ * around. Anything else — a transient 5xx, a 409, throttling — is not a
+ * reason to drop a stored column, so the fallback must not run for it.
+ */
+function isMissingDefaultError(result: ApiResult): boolean {
+  const body = result.body as { type?: unknown; message?: unknown } | null;
+  return (
+    result.status === 400 &&
+    body?.type === 'general_argument_invalid' &&
+    typeof body.message === 'string' &&
+    body.message.includes('"default"')
+  );
+}
+
 async function createTypeEnum(): Promise<ApiResult> {
   const created = await api('POST', '/attributes/enum', {
     key: 'type',
@@ -372,12 +395,14 @@ async function ensureNoteEnum(): Promise<StepOutcome> {
     };
   }
 
+  const failures: string[] = [];
   let updated: ApiResult | null = null;
   for (const payload of enumPatchPayloads(['task', 'request', 'note'], true)) {
     updated = await api('PATCH', '/attributes/enum/type', payload);
     if (updated.status === 200 || updated.status === 202) {
       break;
     }
+    failures.push(describe(updated));
   }
 
   if (updated !== null && (updated.status === 200 || updated.status === 202)) {
@@ -390,10 +415,23 @@ async function ensureNoteEnum(): Promise<StepOutcome> {
     };
   }
 
-  console.warn(
-    `[probe A] updateEnumAttribute failed: ${updated === null ? 'no response' : describe(updated)}`,
-  );
-  console.warn('[probe A] applying data-safe fallback: delete + recreate enum');
+  const failure = failures.join(' then ');
+  console.warn(`[probe A] updateEnumAttribute failed: ${failure}`);
+
+  // Delete+recreate drops the stored `type` on every task, so it is entered
+  // only for the one route rejection it was designed around. A transient 5xx,
+  // a 409 or throttling is not a reason to destroy data — report it instead.
+  if (updated === null || !isMissingDefaultError(updated)) {
+    return {
+      step: 'enum.type',
+      changed: false,
+      fallback: false,
+      failed: true,
+      detail: `updateEnumAttribute failed and the destructive fallback does not apply: ${failure}`,
+    };
+  }
+
+  console.warn('[probe A] applying delete + recreate fallback (fresh collection)');
 
   const deleted = await api('DELETE', '/attributes/type');
   if (deleted.status !== 204 && deleted.status !== 200) {
@@ -604,9 +642,9 @@ async function ensureAttachmentAttribute(
 
     // A failed reconcile must not abort the run and hide every attribute and
     // index that follows it (and unlike the note collection, deleting `kind`
-    // would wipe the value on every attachment row). Transport errors and the
-    // availability poll are folded in too, so this path really never throws —
-    // the failure is reported instead and `main` exits non-zero.
+    // would wipe the value on every attachment row). The PATCH and the
+    // availability poll are folded in so neither can escape; a failed drift
+    // read or attribute create still throws and `main().catch` reports it.
     let failure: string | null = null;
     let updated: ApiResult | null = null;
     try {
