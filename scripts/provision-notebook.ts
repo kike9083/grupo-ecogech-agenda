@@ -18,17 +18,21 @@
  * `updateEnumAttribute` without it — verified live against this project: the
  * payload without `default` answers
  * `400 general_argument_invalid "Param \"default\" is not optional."`, the
- * same payload with `default` passes route validation. Probe B's update path
- * has never been exercised on 1.8.1 and keeps its fallback:
- *   - probe A fails with that 400, delete + recreate the enum attribute.
- *     That drops the stored `type` on every existing task, so it is entered
- *     ONLY for the route rejection it was designed around, which is what a
- *     fresh `agenda.tasks` hits. Any other status is a failed step.
- *   - probe B fails, add a `createdAt` ISO string attribute + index on it
+ * same payload with `default` passes route validation.
+ *
+ * Because every PATCH now carries `default`, that 400 is no longer reachable
+ * from this file: the probe A delete+recreate below is a dead, fail-closed
+ * guard kept for a handler that regresses the contract. It is entered ONLY on
+ * that exact rejection — and that drops the stored `type` on every task — so
+ * any other status is a reported, non-zero-exit failed step.
+ *
+ * Probe B's index-create path has never been exercised on 1.8.1 and keeps its
+ * additive fallback: a `createdAt` ISO string attribute plus an index on it.
  *
  * Re-running is a no-op: every step first reads current state and skips when
  * the change is already present. The additive steps never touch existing
- * documents; the probe A fallback above is the single exception.
+ * documents; the probe A guard above is the single destructive shape, and it
+ * should not run.
  *
  * Usage: `node scripts/provision-notebook.ts`
  * Reads `APPWRITE_ENDPOINT` / `APPWRITE_PROJECT_ID` / `APPWRITE_API_KEY` /
@@ -431,7 +435,7 @@ async function ensureNoteEnum(): Promise<StepOutcome> {
     };
   }
 
-  console.warn('[probe A] applying delete + recreate fallback (fresh collection)');
+  console.warn('[probe A] applying delete + recreate fallback (dead guard)');
 
   const deleted = await api('DELETE', '/attributes/type');
   if (deleted.status !== 204 && deleted.status !== 200) {

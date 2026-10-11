@@ -329,15 +329,26 @@ describe('enumPatchPayloads (the 1.8.1 mandatory `default` stays applied)', () =
     expect(fn).toContain('default: elements[0]');
   });
 
-  it('routes both probe-A PATCH sites through that payload builder', () => {
+  it('routes the enum PATCHes through that payload builder', () => {
     expect(source).toMatch(
       /enumPatchPayloads\(\['task', 'request', 'note'\], true\)/,
     );
     expect(source).toMatch(/enumPatchPayloads\(wanted, body\.required === true\)/);
   });
 
+  /**
+   * Pinning only the call site left a hole both reviewers found: neutering the
+   * predicate to `return true` re-armed delete+recreate and the suite stayed
+   * green. The three conditions are asserted from the function body itself.
+   */
   it('gates the destructive probe-A fallback on the documented 400 only', () => {
-    expect(source).toContain('function isMissingDefaultError');
+    const predicate = /function isMissingDefaultError[\s\S]*?\n}/.exec(source)?.[0] ?? '';
+
+    expect(predicate, 'isMissingDefaultError must remain extractable from source').not.toBe('');
+    expect(predicate).toContain('result.status === 400');
+    expect(predicate).toContain("body?.type === 'general_argument_invalid'");
+    expect(predicate).toContain("typeof body.message === 'string'");
+    expect(predicate).toContain('body.message.includes(\'"default"\')');
     expect(source).toMatch(
       /if \(updated === null \|\| !isMissingDefaultError\(updated\)\)/,
     );
