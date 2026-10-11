@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task, TaskPage } from '@/lib/appwrite/tasks';
+import { TASK_STATUSES } from '@/lib/validation/task';
 import {
   LOAD_ERROR_MESSAGE,
   NEXT_PAGE_LABEL,
@@ -165,7 +166,18 @@ describe('statusActionLabel', () => {
   it('labels every transition button in Spanish', () => {
     expect(statusActionLabel('in_progress')).toBe('Iniciar');
     expect(statusActionLabel('done')).toBe('Completar');
-    expect(statusActionLabel('cancelled')).toBe('Cancelar');
+    expect(statusActionLabel('cancelled')).toBe('Cancelar tarea');
+  });
+
+  /**
+   * The delete control rendered in the same row uses a bare "Cancelar" to
+   * abort the deletion. A status button sharing that exact label sits next to
+   * it once the delete is armed, and the two do opposite things.
+   */
+  it('never reuses the delete confirm\u2019s bare "Cancelar"', () => {
+    for (const to of TASK_STATUSES) {
+      expect(statusActionLabel(to)).not.toBe('Cancelar');
+    }
   });
 });
 

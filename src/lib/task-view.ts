@@ -118,7 +118,10 @@ export function statusActionLabel(to: TaskStatus): string {
     case 'done':
       return 'Completar';
     case 'cancelled':
-      return 'Cancelar';
+      // Not just "Cancelar": the row also carries the delete confirm's own
+      // "Cancelar", and two identical labels with opposite meanings sit next to
+      // each other once the delete is armed.
+      return 'Cancelar tarea';
   }
 }
 
