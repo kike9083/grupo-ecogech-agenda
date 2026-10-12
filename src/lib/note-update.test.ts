@@ -189,6 +189,40 @@ describe('performUpdateNote', () => {
     expect(deps.redirects).toEqual([NOTE_UPDATE_SUCCESS_REDIRECT]);
   });
 
+  it('returns to a sanitised same-origin destination when the form supplies one', async () => {
+    const deps = makeDeps();
+
+    await performUpdateNote(
+      deps,
+      {
+        documentId: 'doc-1',
+        createdBy: 'user-123',
+        returnTo: '/calendario?month=2026-10&day=2026-10-15&updated=1',
+      },
+      validDraft,
+    );
+
+    expect(deps.redirects).toEqual([
+      '/calendario?month=2026-10&day=2026-10-15&updated=1',
+    ]);
+  });
+
+  it('ignores an unsafe returnTo and falls back to the home banner', async () => {
+    const deps = makeDeps();
+
+    await performUpdateNote(
+      deps,
+      {
+        documentId: 'doc-1',
+        createdBy: 'user-123',
+        returnTo: '//evil.com',
+      },
+      validDraft,
+    );
+
+    expect(deps.redirects).toEqual([NOTE_UPDATE_SUCCESS_REDIRECT]);
+  });
+
   it('recovers an expired session via the shared login redirect', async () => {
     const deps = makeDeps({
       updateNote: async () => {

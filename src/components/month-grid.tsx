@@ -13,6 +13,7 @@ import {
   type CalendarDay,
 } from '@/lib/calendar';
 import { DayCell, DayDetail } from '@/components/day-cell';
+import { TaskDetailModal } from '@/components/task-detail-modal';
 import { WEEKDAY_LABELS } from '@/lib/calendar';
 
 /**
@@ -29,6 +30,8 @@ interface MonthGridProps {
   recordsByDate: Record<string, Task[]>;
   /** Selected day (`YYYY-MM-DD`) or undefined when none is selected. */
   selectedDay?: string;
+  /** Record opened by `?task=` — renders the detail modal when present. */
+  selectedTask?: Task;
   /** `null` when the load failed, an empty grid otherwise. */
   loadFailed: boolean;
   errorMessage?: string;
@@ -40,6 +43,7 @@ export function MonthGrid({
   grid,
   recordsByDate,
   selectedDay,
+  selectedTask,
   loadFailed,
   errorMessage,
 }: MonthGridProps) {
@@ -124,7 +128,12 @@ export function MonthGrid({
         <DayDetail
           date={selectedDay}
           records={recordsByDate[selectedDay] ?? []}
+          monthKey={monthKey}
         />
+      ) : null}
+
+      {selectedTask !== undefined ? (
+        <TaskDetailModal task={selectedTask} monthKey={monthKey} />
       ) : null}
     </div>
   );

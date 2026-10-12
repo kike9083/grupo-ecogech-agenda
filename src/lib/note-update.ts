@@ -2,6 +2,7 @@ import { toDomainError, type DomainErrorKind } from '@/lib/appwrite/errors';
 import type { Task } from '@/lib/appwrite/tasks';
 import { SESSION_EXPIRED_REDIRECT } from '@/lib/note-creation';
 import { normalizeNoteBodyHtml, plainTextFromHtml } from '@/lib/rich-text';
+import { sanitizeReturnTo } from '@/lib/safe-redirect';
 import {
   buildNoteUpdate,
   validateNoteDraft,
@@ -23,7 +24,8 @@ import {
  *   NO data-layer call (the form posts `createdBy` only as an advisory hint;
  *   Appwrite document permissions are the enforcement backstop)
  * - local validation failure → field errors, NO data-layer call
- * - success → `NOTE_UPDATE_SUCCESS_REDIRECT`
+ * - success → `input.returnTo` when it is a safe same-origin path, else
+ *   `NOTE_UPDATE_SUCCESS_REDIRECT`
  * - `DomainError.session-expired` → `SESSION_EXPIRED_REDIRECT`
  * - other `DomainError.kind` → form-level message, values preserved
  */
@@ -51,6 +53,12 @@ export interface UpdateNoteInput {
   documentId: string;
   /** Owner id as server-rendered in the form — advisory, not trusted. */
   createdBy: string;
+  /**
+   * Optional post-success destination. The calendar's detail modal posts its
+   * own so an edit lands back on the calendar. Sanitised below — anything that
+   * is not a same-origin path falls back to `NOTE_UPDATE_SUCCESS_REDIRECT`.
+   */
+  returnTo?: string;
 }
 
 /** Form-level copy per `DomainError.kind`, plus the two local guards. */
@@ -140,5 +148,7 @@ export async function performUpdateNote(
     return;
   }
 
-  deps.redirect(NOTE_UPDATE_SUCCESS_REDIRECT);
+  deps.redirect(
+    sanitizeReturnTo(input.returnTo ?? '') ?? NOTE_UPDATE_SUCCESS_REDIRECT,
+  );
 }

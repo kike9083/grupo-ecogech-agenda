@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { createTaskAction, updateTaskAction } from '@/actions/tasks';
 import {
@@ -54,6 +55,8 @@ export function TaskForm({
   recordId,
   createdBy,
   initial,
+  cancelHref = '/',
+  returnTo,
 }: {
   defaultDate?: string;
   /** Present only in edit mode — switches action, submit copy and payload. */
@@ -62,6 +65,10 @@ export function TaskForm({
   createdBy?: string;
   /** Server-rendered record values used until the first failed submission. */
   initial?: TaskDraft;
+  /** Where the Cancel link goes — the calendar modal closes back to itself. */
+  cancelHref?: string;
+  /** Post-success destination forwarded to the update action (edit mode only). */
+  returnTo?: string;
 }) {
   const editing = recordId !== undefined;
 
@@ -98,6 +105,9 @@ export function TaskForm({
         <>
           <input type="hidden" name="documentId" value={recordId} />
           <input type="hidden" name="createdBy" value={createdBy ?? ''} />
+          {returnTo !== undefined ? (
+            <input type="hidden" name="returnTo" value={returnTo} />
+          ) : null}
         </>
       ) : null}
 
@@ -196,9 +206,9 @@ export function TaskForm({
               ? 'Guardar cambios'
               : 'Crear tarea'}
         </button>
-        <a href="/" className="btn btn-ghost">
+        <Link href={cancelHref} className="btn btn-ghost">
           Cancelar
-        </a>
+        </Link>
       </div>
     </form>
   );

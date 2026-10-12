@@ -99,6 +99,9 @@ export async function updateNoteAction(
   const input: UpdateNoteInput = {
     documentId: String(formData.get('documentId') ?? ''),
     createdBy: String(formData.get('createdBy') ?? ''),
+    // Optional post-success destination (the calendar modal's own URL). The
+    // flow sanitises it; an empty string falls back to the home banner.
+    returnTo: String(formData.get('returnTo') ?? ''),
   };
 
   const user = await getCurrentUser();

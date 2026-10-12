@@ -10,8 +10,10 @@ import {
   formatMonthKey,
   formatMonthTitle,
   gridRange,
+  TASK_PARAM_MAX_LENGTH,
   parseDayParam,
   parseMonthParam,
+  parseTaskParam,
   placeRecordsByDate,
   resolveCalendarState,
   shiftMonth,
@@ -171,6 +173,40 @@ describe('buildCalendarHref', () => {
     );
     expect(buildCalendarHref({ month: '2026-10', day: '2026-10-15' })).toBe(
       '/calendario?month=2026-10&day=2026-10-15',
+    );
+  });
+
+  it('carries the task id that opens the detail modal', () => {
+    expect(
+      buildCalendarHref({ month: '2026-10', day: '2026-10-15', task: 'doc-1' }),
+    ).toBe('/calendario?month=2026-10&day=2026-10-15&task=doc-1');
+  });
+
+  it('omits an empty task id', () => {
+    expect(buildCalendarHref({ month: '2026-10', task: '' })).toBe(
+      '/calendario?month=2026-10',
+    );
+  });
+});
+
+describe('parseTaskParam', () => {
+  it('keeps a non-empty id and trims its edges', () => {
+    expect(parseTaskParam('doc-1')).toBe('doc-1');
+    expect(parseTaskParam('  doc-1  ')).toBe('doc-1');
+  });
+
+  it('drops a missing or blank value', () => {
+    expect(parseTaskParam(undefined)).toBeUndefined();
+    expect(parseTaskParam('')).toBeUndefined();
+    expect(parseTaskParam('   ')).toBeUndefined();
+  });
+
+  it('drops an over-long id and keeps one at the limit', () => {
+    expect(
+      parseTaskParam('a'.repeat(TASK_PARAM_MAX_LENGTH + 1)),
+    ).toBeUndefined();
+    expect(parseTaskParam('a'.repeat(TASK_PARAM_MAX_LENGTH))).toBe(
+      'a'.repeat(TASK_PARAM_MAX_LENGTH),
     );
   });
 });

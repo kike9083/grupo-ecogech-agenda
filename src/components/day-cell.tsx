@@ -60,14 +60,23 @@ export function DayCell({
 
       <ul className="flex flex-col gap-1">
         {records.map((record) => (
-          <li
-            key={record.$id}
-            className="truncate rounded bg-surface-sunken px-1 text-xs"
-          >
-            <span className="font-medium">{typeLabel(record.type)}</span>
-            <span className="ml-1">
-              {record.title !== '' ? record.title : statusLabel(record.status)}
-            </span>
+          <li key={record.$id}>
+            <Link
+              href={buildCalendarHref({
+                month: monthKey,
+                day: date,
+                task: record.$id,
+              })}
+              title={
+                record.title !== '' ? record.title : statusLabel(record.status)
+              }
+              className="block truncate rounded bg-surface-sunken px-1 text-xs transition hover:bg-accent-soft hover:text-accent-ink"
+            >
+              <span className="font-medium">{typeLabel(record.type)}</span>
+              <span className="ml-1">
+                {record.title !== '' ? record.title : statusLabel(record.status)}
+              </span>
+            </Link>
           </li>
         ))}
       </ul>
@@ -82,9 +91,12 @@ export function DayCell({
 export function DayDetail({
   date,
   records,
+  monthKey,
 }: {
   date: string;
   records: Task[];
+  /** Canonical `YYYY-MM` of the displayed month — carried in every link. */
+  monthKey: string;
 }) {
   return (
     <section
@@ -118,9 +130,16 @@ export function DayDetail({
               <span className="font-mono meta">
                 {record.time}
               </span>
-              <span className="min-w-0 truncate">
+              <Link
+                href={buildCalendarHref({
+                  month: monthKey,
+                  day: date,
+                  task: record.$id,
+                })}
+                className="min-w-0 truncate font-medium hover:text-accent-ink hover:underline"
+              >
                 {record.title !== '' ? record.title : 'Sin título'}
-              </span>
+              </Link>
               <span className="badge badge-neutral">
                 {statusLabel(record.status)}
               </span>

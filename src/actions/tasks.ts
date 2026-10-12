@@ -156,6 +156,7 @@ export async function updateStatusAction(
   if (result.ok) {
     revalidatePath('/');
     revalidatePath('/admin');
+    revalidatePath('/calendario');
     return INITIAL_STATUS_UPDATE_STATE;
   }
   if (result.reason === 'session-expired') {
@@ -178,6 +179,9 @@ export async function updateTaskAction(
   const input: UpdateTaskInput = {
     documentId: String(formData.get('documentId') ?? ''),
     createdBy: String(formData.get('createdBy') ?? ''),
+    // Optional post-success destination (the calendar modal's own URL). The
+    // flow sanitises it; an empty string falls back to the home banner.
+    returnTo: String(formData.get('returnTo') ?? ''),
   };
 
   const user = await getCurrentUser();

@@ -13,10 +13,12 @@ import {
   CALENDAR_BACK_LABEL,
   CALENDAR_LOAD_ERROR_MESSAGE,
   CALENDAR_LOADING_LABEL,
+  CALENDAR_UPDATED_MESSAGE,
   buildMonthGrid,
   gridRange,
   parseDayParam,
   parseMonthParam,
+  parseTaskParam,
   placeRecordsByDate,
 } from '@/lib/calendar';
 import { loadEnv } from '@/lib/env';
@@ -38,6 +40,7 @@ async function CalendarSection({
   year,
   month,
   selectedDay,
+  selectedTaskId,
 }: {
   user: { id: string };
   secret: string;
@@ -45,6 +48,8 @@ async function CalendarSection({
   year: number;
   month: number;
   selectedDay?: string;
+  /** `?task=` id whose detail modal should open, already validated. */
+  selectedTaskId?: string;
 }) {
   const env = loadEnv();
   const grid = buildMonthGrid(year, month);
@@ -76,6 +81,13 @@ async function CalendarSection({
 
   const recordsByDate = page === null ? {} : placeRecordsByDate(page.tasks);
 
+  // The modal's record comes from the already-loaded grid: an id that is not
+  // in this month (or a stale one) simply opens no modal.
+  const selectedTask =
+    selectedTaskId === undefined || page === null
+      ? undefined
+      : page.tasks.find((task) => task.$id === selectedTaskId);
+
   return (
     <MonthGrid
       year={year}
@@ -83,6 +95,7 @@ async function CalendarSection({
       grid={grid}
       recordsByDate={recordsByDate}
       selectedDay={selectedDay}
+      selectedTask={selectedTask}
       loadFailed={page === null}
       errorMessage={CALENDAR_LOAD_ERROR_MESSAGE}
     />
@@ -107,8 +120,12 @@ export default async function CalendarioPage({
   const params = await searchParams;
   const monthParam = Array.isArray(params.month) ? params.month[0] : params.month;
   const dayParam = Array.isArray(params.day) ? params.day[0] : params.day;
+  const taskParam = Array.isArray(params.task) ? params.task[0] : params.task;
   const { year, month } = parseMonthParam(monthParam);
   const selectedDay = parseDayParam(dayParam);
+  const selectedTaskId = parseTaskParam(taskParam);
+  const updated =
+    (Array.isArray(params.updated) ? params.updated[0] : params.updated) === '1';
   const admin = await isAdmin();
 
   return (
@@ -128,6 +145,12 @@ export default async function CalendarioPage({
         </>
       }
     >
+      {updated ? (
+        <p role="status" className="banner banner-success">
+          {CALENDAR_UPDATED_MESSAGE}
+        </p>
+      ) : null}
+
       <Suspense
         fallback={
           <p role="status" className="meta">
@@ -142,6 +165,7 @@ export default async function CalendarioPage({
           year={year}
           month={month}
           selectedDay={selectedDay}
+          selectedTaskId={selectedTaskId}
         />
       </Suspense>
     </PageShell>

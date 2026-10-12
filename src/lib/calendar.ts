@@ -155,6 +155,25 @@ export function parseDayParam(value: string | undefined): string | undefined {
   return isRealCalendarDate(raw) ? raw : undefined;
 }
 
+/** Longest id the `?task=` modal parameter accepts before it is discarded. */
+export const TASK_PARAM_MAX_LENGTH = 64;
+
+/**
+ * Parses `?task=<id>` — the record whose detail modal the calendar should
+ * open (spec `calendar-view` → "Task detail modal"). A blank or over-long
+ * value is dropped; the id is matched against the already-loaded grid records,
+ * so an unknown id simply opens no modal.
+ */
+export function parseTaskParam(
+  value: string | undefined,
+): string | undefined {
+  const raw = (value ?? '').trim();
+  if (raw === '' || raw.length > TASK_PARAM_MAX_LENGTH) {
+    return undefined;
+  }
+  return raw;
+}
+
 /** Displayed month heading: "octubre de 2026". */
 export function formatMonthTitle(year: number, month: number): string {
   const name = MONTH_NAMES_ES[month - 1] ?? String(month);
@@ -190,10 +209,16 @@ export function placeRecordsByDate<T extends { date: string }>(
   return byDate;
 }
 
-/** Builds a `/calendario` URL from the current month/day selection. */
+/**
+ * Builds a `/calendario` URL from the current month/day selection and the
+ * optional `task` id whose detail modal should open (spec `calendar-view` →
+ * "Task detail modal"). Empty pieces are omitted; nothing to carry collapses
+ * to the bare route.
+ */
 export function buildCalendarHref(params: {
   month?: string;
   day?: string;
+  task?: string;
 }): string {
   const query = new URLSearchParams();
   if (params.month !== undefined && params.month !== '') {
@@ -201,6 +226,9 @@ export function buildCalendarHref(params: {
   }
   if (params.day !== undefined && params.day !== '') {
     query.set('day', params.day);
+  }
+  if (params.task !== undefined && params.task !== '') {
+    query.set('task', params.task);
   }
   const serialized = query.toString();
   return serialized === '' ? '/calendario' : `/calendario?${serialized}`;
@@ -217,6 +245,9 @@ export const CALENDAR_PREV_LABEL = 'Mes anterior';
 export const CALENDAR_NEXT_LABEL = 'Mes siguiente';
 export const CALENDAR_CREATE_LABEL = 'Nueva tarea para este día';
 export const CALENDAR_BACK_LABEL = 'Volver a la lista';
+export const CALENDAR_TASK_MODAL_LABEL = 'Detalle del registro';
+export const CALENDAR_TASK_MODAL_CLOSE_LABEL = 'Cerrar';
+export const CALENDAR_UPDATED_MESSAGE = 'Registro actualizado correctamente.';
 
 export type CalendarStateKind = 'error' | 'empty' | 'results';
 

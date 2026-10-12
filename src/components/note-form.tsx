@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -28,6 +29,10 @@ interface NoteFormProps {
   createdBy?: string;
   /** Server-rendered current values for edit mode. */
   initial?: { title: string; date: string; bodyHtml: string };
+  /** Where the Cancel link goes — the calendar modal closes back to itself. */
+  cancelHref?: string;
+  /** Post-success destination forwarded to the update action (edit mode only). */
+  returnTo?: string;
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -41,7 +46,13 @@ function FieldError({ message }: { message?: string }) {
   );
 }
 
-export function NoteForm({ recordId, createdBy, initial }: NoteFormProps = {}) {
+export function NoteForm({
+  recordId,
+  createdBy,
+  initial,
+  cancelHref = '/',
+  returnTo,
+}: NoteFormProps = {}) {
   // Both actions share the same state shape, so the hook never changes shape
   // between modes — only which action it dispatches to.
   const action = recordId === undefined ? createNoteAction : updateNoteAction;
@@ -75,6 +86,9 @@ export function NoteForm({ recordId, createdBy, initial }: NoteFormProps = {}) {
         <>
           <input type="hidden" name="documentId" defaultValue={recordId} />
           <input type="hidden" name="createdBy" defaultValue={createdBy ?? ''} />
+          {returnTo !== undefined ? (
+            <input type="hidden" name="returnTo" value={returnTo} />
+          ) : null}
         </>
       ) : null}
       {state.formError !== null ? (
@@ -168,12 +182,9 @@ export function NoteForm({ recordId, createdBy, initial }: NoteFormProps = {}) {
               ? 'Guardar nota'
               : 'Guardar cambios'}
         </button>
-        <a
-          href="/"
-          className="btn btn-ghost"
-        >
+        <Link href={cancelHref} className="btn btn-ghost">
           Cancelar
-        </a>
+        </Link>
       </div>
     </form>
   );
