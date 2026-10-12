@@ -132,7 +132,25 @@ export function formatCreatedBy(email: string): string {
 
 export const NOTE_SNIPPET_MAX_LENGTH = 120;
 
+/**
+ * Description preview length for the list cards: long enough for two clamped
+ * lines, short enough that a page of 20 cards never ships a 2000-char body.
+ */
+export const DESCRIPTION_SNIPPET_MAX_LENGTH = 200;
+
 export const NOTE_EMPTY_HEADING = 'Nota sin contenido';
+
+/**
+ * Trims the edges and truncates to a single line with an ellipsis — the one
+ * primitive behind both the note-body and the task-description previews.
+ */
+export function truncateLine(text: string, maxLength: number): string {
+  const normalized = text.trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength).trimEnd()}…`;
+}
 
 /**
  * One-line preview of a note body (spec `task-listing` → "includes notes"):
@@ -142,11 +160,20 @@ export function noteSnippet(
   text: string,
   maxLength: number = NOTE_SNIPPET_MAX_LENGTH,
 ): string {
-  const normalized = text.trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxLength).trimEnd()}…`;
+  return truncateLine(text, maxLength);
+}
+
+/**
+ * At-a-glance preview of a task/request/event description for the list card:
+ * the same trim-and-ellipsis treatment as `noteSnippet`, so a long description
+ * never stretches the row. An empty description stays empty so the card can
+ * omit the block entirely.
+ */
+export function descriptionSnippet(
+  text: string,
+  maxLength: number = DESCRIPTION_SNIPPET_MAX_LENGTH,
+): string {
+  return truncateLine(text, maxLength);
 }
 
 /**

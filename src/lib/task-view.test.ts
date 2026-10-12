@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Task, TaskPage } from '@/lib/appwrite/tasks';
 import { TASK_STATUSES } from '@/lib/validation/task';
 import {
+  DESCRIPTION_SNIPPET_MAX_LENGTH,
   LOAD_ERROR_MESSAGE,
   NEXT_PAGE_LABEL,
   RETRY_LABEL,
   adminEmptyMessage,
   allowedTransitions,
   buildListHref,
+  descriptionSnippet,
   emptyMessage,
   formatCreatedAt,
   formatCreatedBy,
@@ -207,6 +209,29 @@ describe('note list helpers (spec task-listing → includes notes)', () => {
 
   it('falls back to a placeholder for an empty note', () => {
     expect(noteHeading('', '')).toBe('Nota sin contenido');
+  });
+});
+
+describe('descriptionSnippet (spec task-listing → at-a-glance summary)', () => {
+  it('shortens a long description with an ellipsis', () => {
+    expect(descriptionSnippet('a'.repeat(400), 20)).toBe('a'.repeat(20) + '…');
+  });
+
+  it('keeps a short description untouched and trims its edges', () => {
+    expect(descriptionSnippet('  Visita a la planta  ')).toBe(
+      'Visita a la planta',
+    );
+  });
+
+  it('returns an empty string for a blank description so the card can omit it', () => {
+    expect(descriptionSnippet('')).toBe('');
+    expect(descriptionSnippet('   ')).toBe('');
+  });
+
+  it('truncates at the default 200-character budget', () => {
+    const snippet = descriptionSnippet('b'.repeat(500));
+    expect(snippet).toHaveLength(DESCRIPTION_SNIPPET_MAX_LENGTH + 1);
+    expect(snippet.endsWith('…')).toBe(true);
   });
 });
 

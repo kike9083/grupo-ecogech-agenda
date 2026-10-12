@@ -12,6 +12,7 @@ import {
   NEXT_PAGE_LABEL,
   RETRY_LABEL,
   buildListHref,
+  descriptionSnippet,
   emptyMessage,
   formatCreatedAt,
   formatCreatedBy,
@@ -102,6 +103,9 @@ export function TaskList({
           const snippet = isNote
             ? noteSnippet(plainTextFromHtml(task.bodyHtml ?? ''))
             : '';
+          const description = isNote
+            ? ''
+            : descriptionSnippet(task.description);
 
           return (
             <li
@@ -117,7 +121,16 @@ export function TaskList({
                     {isNote ? noteHeading(task.title, snippet) : task.title}
                   </span>
                 </div>
-                {isNote ? <NoteBody html={task.bodyHtml ?? ''} /> : null}
+                {isNote ? (
+                  <NoteBody html={task.bodyHtml ?? ''} />
+                ) : description !== '' ? (
+                  <p
+                    className="meta line-clamp-2"
+                    title={task.description}
+                  >
+                    {description}
+                  </p>
+                ) : null}
                 <span className="meta">{formatCreatedBy(task.createdByEmail)}</span>
               </div>
 
