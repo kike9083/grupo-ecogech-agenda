@@ -33,7 +33,11 @@ export const NOTES_LOAD_ERROR_MESSAGE =
 
 export const NOTES_NEW_LABEL = 'Nueva nota';
 
+export const NOTES_NEW_TASK_LABEL = 'Nueva tarea';
+
 export const NOTES_LIST_HEADING = 'Notas';
+
+export const NOTES_ATTACHMENTS_HEADING = 'Adjuntos';
 
 /**
  * Builds a `/notas` URL from the workspace state. `tag` picks the folder, `id`

@@ -1,10 +1,18 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Databases } from 'node-appwrite';
+import { Databases, Storage } from 'node-appwrite';
+import { AttachmentForm } from '@/components/attachment-form';
+import { AttachmentGallery } from '@/components/attachment-gallery';
 import { NoteForm } from '@/components/note-form';
 import { NotesList } from '@/components/notes-list';
 import { NotesSidebar } from '@/components/notes-sidebar';
-import { createSessionClient } from '@/lib/appwrite/clients';
+import {
+  ATTACHMENTS_BUCKET_ID,
+  ATTACHMENTS_COLLECTION_ID,
+  createAttachmentsApi,
+  type Attachment,
+} from '@/lib/appwrite/attachments';
+import { createAdminClient, createSessionClient } from '@/lib/appwrite/clients';
 import { isDomainError } from '@/lib/appwrite/errors';
 import {
   getCurrentUser,
@@ -21,8 +29,10 @@ import {
 } from '@/lib/appwrite/tasks';
 import { loadEnv } from '@/lib/env';
 import {
+  NOTES_ATTACHMENTS_HEADING,
   NOTES_LOAD_ERROR_MESSAGE,
   NOTES_NEW_LABEL,
+  NOTES_NEW_TASK_LABEL,
   NOTES_SELECT_PROMPT,
   NOTES_SUBTITLE,
   NOTES_TITLE,
@@ -127,6 +137,27 @@ export default async function NotasPage({
           toNoteListItem(note, plainTextFromHtml(note.bodyHtml ?? '')),
         );
 
+  // Right column, below the editor: the open note's attachments. Loaded
+  // exactly like `/editar` does — a session-scoped read for the record list
+  // plus the API-key client for storage — and a failure never hides the note.
+  let attachments: Attachment[] = [];
+  if (selected !== null) {
+    try {
+      const client = admin ? createAdminClient() : createSessionClient(secret);
+      attachments = await createAttachmentsApi(
+        new Databases(client),
+        new Storage(createAdminClient()),
+        {
+          databaseId: env.APPWRITE_DATABASE_ID,
+          bucketId: ATTACHMENTS_BUCKET_ID,
+          collectionId: ATTACHMENTS_COLLECTION_ID,
+        },
+      ).listAttachmentsForRecords([selected.$id]);
+    } catch {
+      // Leave the gallery empty — the note is still editable.
+    }
+  }
+
   const folders = buildNotesFolders(counts, tag);
   const editor = resolveNotesEditorState(selected, noteFailed);
 
@@ -162,6 +193,9 @@ export default async function NotasPage({
           <nav className="flex flex-wrap items-center justify-end gap-2">
             <Link href="/nota" className="btn btn-primary">
               {NOTES_NEW_LABEL}
+            </Link>
+            <Link href="/nueva" className="btn btn-secondary">
+              {NOTES_NEW_TASK_LABEL}
             </Link>
             <Link href="/" className="btn btn-secondary">
               Agenda
@@ -213,6 +247,14 @@ export default async function NotasPage({
                 cancelHref={buildNotesHref({ tag, id: editor.note.$id })}
                 returnTo={buildNotesHref({ tag, id: editor.note.$id })}
               />
+
+              <section className="card flex flex-col gap-3 p-5">
+                <h3 className="text-sm font-semibold">
+                  {NOTES_ATTACHMENTS_HEADING}
+                </h3>
+                <AttachmentGallery attachments={attachments} />
+                <AttachmentForm recordId={editor.note.$id} />
+              </section>
             </div>
           )}
         </section>

@@ -16,8 +16,12 @@ import {
  * Login server action (design D2): email + password → Appwrite session
  * created through the API-key-authenticated transport (verify fix F1 — the
  * keyless client used to receive `secret: ""` and stored an empty cookie)
- * → httpOnly `aw_session` cookie → redirect `/`.
- * Failures redirect back to `/login?error=...` so the page stays an RSC.
+ * → httpOnly `aw_session` cookie → redirect `/notas`.
+ *
+ * The landing page is the notes workspace (spec `note-capture` → "Notes
+ * workspace"): it is the app's main screen, with the task list one click away
+ * on `/`. A stale or failed login still redirects back to
+ * `/login?error=...` so the page stays an RSC.
  */
 export async function login(formData: FormData): Promise<void> {
   const email = String(formData.get('email') ?? '');
@@ -27,7 +31,7 @@ export async function login(formData: FormData): Promise<void> {
     {
       createEmailPasswordSession,
       setSessionCookie,
-      onSuccess: () => redirect('/'),
+      onSuccess: () => redirect('/notas'),
       onFailure: (reason) => redirect(`/login?error=${reason}`),
     },
     email,
