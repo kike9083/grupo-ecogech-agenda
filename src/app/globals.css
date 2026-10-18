@@ -264,6 +264,19 @@ h4 {
     color: var(--color-ink-muted);
     background: var(--color-surface-sunken);
   }
+  /* A record's tags: outlined pills so they read as labels, not lifecycle
+     states. Unlike the status badges they are clickable when they carry a
+     filter link. */
+  .badge-tag {
+    color: var(--color-ink-muted);
+    background: transparent;
+    border: 1px solid var(--color-hairline);
+  }
+  a.badge-tag:hover {
+    color: var(--color-accent-ink);
+    background: var(--color-accent-soft);
+    border-color: var(--color-accent);
+  }
 
   /* ---- Feedback banners -------------------------------------------- */
   .banner {
@@ -312,5 +325,169 @@ h4 {
   }
   .link-quiet:hover {
     color: var(--color-accent-ink);
+  }
+
+  /* ---- Rich text (editor surface + stored body) --------------------- */
+  /* One class renders both the editing surface and the saved note, so what
+     the user types is styled exactly like what they later read. Every rule
+     here also matches what `sanitizeNoteHtml` lets through — nothing in this
+     block depends on an inline `style` the whitelist would strip. */
+  .rich-text {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--color-ink);
+  }
+  .rich-text > * + * {
+    margin-top: 0.5rem;
+  }
+  .rich-text h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+  .rich-text h2 {
+    font-size: 1.0625rem;
+    font-weight: 700;
+  }
+  .rich-text h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .rich-text ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .rich-text ol {
+    list-style: decimal;
+    padding-left: 1.25rem;
+  }
+  .rich-text li > p {
+    margin: 0;
+  }
+  .rich-text blockquote {
+    border-left: 3px solid var(--color-accent-soft);
+    padding-left: 0.75rem;
+    color: var(--color-ink-muted);
+  }
+  .rich-text code {
+    background: var(--color-surface-sunken);
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.3rem;
+    font-size: 0.85em;
+  }
+  .rich-text pre {
+    background: var(--color-surface-sunken);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-control);
+    padding: 0.75rem;
+    overflow-x: auto;
+  }
+  .rich-text pre code {
+    background: none;
+    padding: 0;
+  }
+  .rich-text a {
+    color: var(--color-accent-ink);
+    text-decoration: underline;
+  }
+  .rich-text hr {
+    border: 0;
+    border-top: 1px solid var(--color-hairline);
+  }
+  .rich-text mark {
+    background: #fef08a;
+    border-radius: 0.25rem;
+    padding: 0 0.15rem;
+  }
+
+  /* Tables — the Notes-style grid. Borders come from this CSS and never from
+     an inline style, which is why the editor's table is not resizable. */
+  .rich-text table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5rem 0;
+    table-layout: fixed;
+  }
+  .rich-text th,
+  .rich-text td {
+    border: 1px solid var(--color-hairline);
+    padding: 0.375rem 0.5rem;
+    vertical-align: top;
+  }
+  .rich-text th {
+    background: var(--color-surface-sunken);
+    font-weight: 600;
+    text-align: left;
+  }
+  .rich-text .selectedCell {
+    background: var(--color-accent-soft);
+  }
+
+  /* Images — stored inline and served by the attachment proxy. */
+  .rich-text img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--color-hairline-soft);
+    border-radius: var(--radius-control);
+    margin: 0.25rem 0;
+  }
+  .rich-text img.ProseMirror-selectednode {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Checklists — the task list drops the bullet and lays the checkbox beside
+     the item text, matching Notes. */
+  .rich-text ul[data-type='taskList'] {
+    list-style: none;
+    padding-left: 0;
+  }
+  .rich-text ul[data-type='taskList'] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .rich-text ul[data-type='taskList'] li > label {
+    flex: 0 0 auto;
+    margin-top: 0.15rem;
+  }
+  .rich-text ul[data-type='taskList'] li > div {
+    flex: 1 1 auto;
+  }
+  .rich-text ul[data-type='taskList'] input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--color-accent);
+  }
+
+  /* Placeholder — shown only while the document is empty. */
+  .rich-text p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--color-ink-subtle);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* ---- Editor toolbar buttons --------------------------------------- */
+  .btn-tool {
+    background: transparent;
+    color: var(--color-ink-muted);
+    border: 1px solid transparent;
+    padding: 0.3125rem 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+  }
+  .btn-tool:hover:not(:disabled) {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    border-color: var(--color-hairline);
+  }
+  .btn-tool[aria-pressed='true'] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-ink);
+  }
+  .btn-tool:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(5 150 105 / 0.35);
   }
 }

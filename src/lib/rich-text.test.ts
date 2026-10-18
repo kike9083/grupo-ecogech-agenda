@@ -33,6 +33,22 @@ describe('plainTextFromHtml (spec note-capture → Plain-text search index)', ()
     expect(plainTextFromHtml('<p></p>')).toBe('');
     expect(plainTextFromHtml('')).toBe('');
   });
+
+  it('indexes table cells and checklist items like paragraph text', () => {
+    expect(
+      plainTextFromHtml(
+        '<table><tbody><tr><td>jose</td><td>45</td></tr></tbody></table>',
+      ),
+    ).toBe('jose 45');
+
+    expect(
+      plainTextFromHtml(
+        '<ul data-type="taskList"><li data-type="taskItem" data-checked="false">' +
+          '<label><input type="checkbox"><span></span></label>' +
+          '<div><p>Comprar pan</p></div></li></ul>',
+      ),
+    ).toBe('Comprar pan');
+  });
 });
 
 describe('sanitizeNoteHtml (spec note-capture → Rich-text body and sanitization)', () => {
@@ -95,6 +111,78 @@ describe('sanitizeNoteHtml (spec note-capture → Rich-text body and sanitizatio
     expect(clean).not.toContain('style');
     expect(clean).not.toContain('position:fixed');
   });
+
+  it('keeps an inline image only when it points at the attachment endpoint', () => {
+    const clean = sanitizeNoteHtml(
+      '<p><img src="/api/attachments/abc123" alt="Acta"></p>',
+    );
+
+    expect(clean).toContain('src="/api/attachments/abc123"');
+    expect(clean).toContain('alt="Acta"');
+  });
+
+  it('drops images whose src is not the app attachment endpoint', () => {
+    const external = sanitizeNoteHtml('<img src="https://evil.test/pixel.gif">');
+    const absolute = sanitizeNoteHtml('<img src="http://evil.test/pixel.gif">');
+    const protocolRelative = sanitizeNoteHtml('<img src="//evil.test/pixel.gif">');
+    const dataUri = sanitizeNoteHtml(
+      '<img src="data:image/svg+xml,<svg onload=alert(1)>">',
+    );
+
+    expect(external).toBe('');
+    expect(absolute).toBe('');
+    expect(protocolRelative).toBe('');
+    expect(dataUri).not.toContain('data:');
+    expect(dataUri).not.toContain('onload');
+  });
+
+  it('keeps tables and their cell structure', () => {
+    const clean = sanitizeNoteHtml(
+      '<table><tbody><tr><th colspan="1" rowspan="1"><p>Nombre</p></th>' +
+        '<td colspan="1" rowspan="1"><p>Edad</p></td></tr></tbody></table>',
+    );
+
+    expect(clean).toContain('<table>');
+    expect(clean).toContain('<th');
+    expect(clean).toContain('<td');
+    expect(clean).toContain('colspan="1"');
+    expect(clean).toContain('Nombre');
+    expect(clean).toContain('Edad');
+  });
+
+  it('keeps checklist items with their checkbox state', () => {
+    const clean = sanitizeNoteHtml(
+      '<ul data-type="taskList">' +
+        '<li data-type="taskItem" data-checked="true">' +
+        '<label><input type="checkbox" checked="checked"><span></span></label>' +
+        '<div><p>Hecho</p></div></li></ul>',
+    );
+
+    expect(clean).toContain('data-type="taskList"');
+    expect(clean).toContain('data-type="taskItem"');
+    expect(clean).toContain('data-checked="true"');
+    expect(clean).toContain('type="checkbox"');
+    expect(clean).toContain('Hecho');
+  });
+
+  it('keeps the highlight mark', () => {
+    const clean = sanitizeNoteHtml('<p><mark>Importante</mark></p>');
+
+    expect(clean).toContain('<mark>');
+    expect(clean).toContain('Importante');
+  });
+
+  it('keeps only a colour declaration on span styles', () => {
+    const kept = sanitizeNoteHtml('<span style="color: #ff0000">Rojo</span>');
+    const dropped = sanitizeNoteHtml(
+      '<span style="position:fixed;background:url(https://evil.test/x)">x</span>',
+    );
+
+    expect(kept).toContain('color:#ff0000');
+    expect(kept).not.toContain('position');
+    expect(dropped).not.toContain('position:fixed');
+    expect(dropped).not.toContain('url(');
+  });
 });
 
 describe('normalizeNoteBodyHtml (cleared Tiptap documents)', () => {
@@ -110,5 +198,11 @@ describe('normalizeNoteBodyHtml (cleared Tiptap documents)', () => {
     expect(normalizeNoteBodyHtml('<p> </p><p>Hola</p>')).toBe(
       '<p> </p><p>Hola</p>',
     );
+  });
+
+  it('keeps an image-only body instead of collapsing it away', () => {
+    const body = '<p><img src="/api/attachments/abc123" alt="Acta"></p>';
+
+    expect(normalizeNoteBodyHtml(body)).toBe(body);
   });
 });

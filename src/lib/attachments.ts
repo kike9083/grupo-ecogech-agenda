@@ -90,6 +90,37 @@ export const ATTACHMENT_ACCEPT: string = ALLOWED_ATTACHMENT_EXTENSIONS.map(
   (extension) => `.${extension}`,
 ).join(',');
 
+/**
+ * The image subset of the allow-list, for the note editor's inline-image
+ * picker. Derived from the same `EXTENSION_MIME` matrix as everything else, so
+ * the picker can never offer a file the upload route would reject.
+ */
+export const IMAGE_ATTACHMENT_EXTENSIONS: readonly string[] = Object.freeze(
+  Object.keys(EXTENSION_MIME).filter((extension) =>
+    (IMAGE_MIME as readonly string[]).includes(EXTENSION_MIME[extension]),
+  ),
+);
+
+/** The `accept` attribute for the note editor's inline-image input. */
+export const IMAGE_ATTACHMENT_ACCEPT: string = IMAGE_ATTACHMENT_EXTENSIONS.map(
+  (extension) => `.${extension}`,
+).join(',');
+
+/**
+ * The only shape an inline note image may take: a relative path to the app's
+ * own attachment proxy. Shared by the two ends that must never disagree — the
+ * editor builds the `src` with `attachmentImageSrc`, and `sanitizeNoteHtml`
+ * drops any `<img>` that does not match this pattern (see `@/lib/rich-text`).
+ * Keeping one constant is what stops a future route rename from silently
+ * making every stored image disappear.
+ */
+export const ATTACHMENT_IMAGE_PATH = /^\/api\/attachments\/[A-Za-z0-9._-]+$/;
+
+/** Builds the `src` an inline note image is stored with. */
+export function attachmentImageSrc(fileId: string): string {
+  return `/api/attachments/${fileId}`;
+}
+
 /** Spanish copy shown inline by the upload form (spec → "inline Spanish error"). */
 export const ATTACHMENT_ERROR_MESSAGES: Record<AttachmentRejectionReason, string> = {
   'too-large': `El archivo es demasiado grande (máximo ${MAX_ATTACHMENT_MB} MB).`,

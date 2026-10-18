@@ -15,7 +15,7 @@ export function NoteBody({ html }: { html: string }) {
 
   return (
     <div
-      className="text-sm leading-relaxed [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+      className="rich-text"
       dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(html) }}
     />
   );

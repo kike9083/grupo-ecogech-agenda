@@ -127,6 +127,7 @@ export default async function EditarPage({
               date: task.date,
               bodyHtml: sanitizeNoteHtml(task.bodyHtml ?? ''),
             }}
+            initialTags={task.tags}
           />
         ) : (
           <TaskForm
@@ -139,6 +140,7 @@ export default async function EditarPage({
               date: task.date,
               time: task.time,
             }}
+            initialTags={task.tags}
           />
         )}
 
