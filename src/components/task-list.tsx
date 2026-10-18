@@ -6,6 +6,7 @@ import { AttachmentGallery } from '@/components/attachment-gallery';
 import { DeleteTaskButton } from '@/components/delete-task-button';
 import { NoteBody } from '@/components/note-body';
 import { StatusControls } from '@/components/status-controls';
+import { TagChips } from '@/components/tag-chips';
 import { plainTextFromHtml } from '@/lib/rich-text';
 import {
   LOAD_ERROR_MESSAGE,
@@ -26,14 +27,17 @@ import {
 
 /**
  * Presentational task list (PR3 task 4.1, spec `task-listing`): three
- * distinct states (error + retry, empty, results) with status/type badges
- * and creator attribution. Every decision comes from the tested helpers in
- * `task-view.ts`; this component is validated by `tsc`/`next build`.
+ * distinct states (error + retry, empty, results) with status/type badges,
+ * tag chips (spec `task-tagging`) and creator attribution. Every decision
+ * comes from the tested helpers in `task-view.ts`; this component is
+ * validated by `tsc`/`next build`.
  */
 interface TaskListProps {
   page: TaskPage | null;
   /** Normalized keyword — empty means the plain list (spec task-search). */
   q: string;
+  /** Canonical tag filter — empty means every tag (spec task-tagging). */
+  tag?: string;
   /** Inclusive lower date bound (`YYYY-MM-DD`) carried across pages. */
   from?: string;
   /** Inclusive upper date bound (`YYYY-MM-DD`) carried across pages. */
@@ -47,13 +51,14 @@ interface TaskListProps {
 export function TaskList({
   page,
   q,
+  tag = '',
   from = '',
   to = '',
   cursor,
   attachmentsByRecord = {},
 }: TaskListProps) {
   const state = resolveListState(page);
-  const searching = q !== '' || from !== '' || to !== '';
+  const searching = q !== '' || tag !== '' || from !== '' || to !== '';
 
   if (state.kind === 'error') {
     return (
@@ -63,7 +68,7 @@ export function TaskList({
       >
         <p className="text-sm text-red-700">{LOAD_ERROR_MESSAGE}</p>
         <a
-          href={buildListHref({ cursor, q, from, to })}
+          href={buildListHref({ cursor, q, tag, from, to })}
           className="text-sm font-semibold text-red-800 underline"
         >
           {RETRY_LABEL}
@@ -131,6 +136,7 @@ export function TaskList({
                     {description}
                   </p>
                 ) : null}
+                <TagChips tags={task.tags} link />
                 <span className="meta">{formatCreatedBy(task.createdByEmail)}</span>
               </div>
 
@@ -197,7 +203,7 @@ export function TaskList({
       {nextCursor !== null ? (
         <div className="flex justify-center pt-1">
           <a
-            href={buildListHref({ cursor: nextCursor, q, from, to })}
+            href={buildListHref({ cursor: nextCursor, q, tag, from, to })}
             rel="next"
             className="btn btn-secondary"
           >

@@ -144,6 +144,7 @@ describe('performUpdateTask', () => {
           date: '2026-10-08',
           time: '11:00',
           searchText: 'Reunión con el cliente Visita a la planta',
+          tags: [],
         },
       },
     ]);
@@ -151,6 +152,7 @@ describe('performUpdateTask', () => {
       'date',
       'description',
       'searchText',
+      'tags',
       'time',
       'title',
       'type',

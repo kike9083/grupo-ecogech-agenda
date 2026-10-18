@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isDomainError } from './errors';
 import {
   CALENDAR_PAGE_SIZE,
+  TAG_AGGREGATION_PAGE_SIZE,
   createTasksApi,
   loadAdminTasks,
   loadCalendarTasks,
@@ -29,6 +30,7 @@ const record: TaskRecord = {
   createdBy: 'user-123',
   createdByEmail: 'owner@example.com',
   searchText: 'Prepare invoice Send the October invoice',
+  tags: [],
 };
 
 interface CreateCall {
@@ -77,6 +79,11 @@ class FakeDatabases implements DatabasesLike {
     total: 0,
     documents: [],
   };
+  /**
+   * When non-empty, each list call shifts the next response off the queue
+   * instead of returning `nextList` — how the paged tag aggregation is fed.
+   */
+  listQueue: Array<{ total: number; documents: RawDocument[] }> = [];
 
   private takeError(): void {
     if (this.nextError !== undefined) {
@@ -115,7 +122,8 @@ class FakeDatabases implements DatabasesLike {
   ): Promise<{ total: number; documents: RawDocument[] }> {
     this.listCalls.push({ databaseId, collectionId, queries });
     this.takeError();
-    return this.nextList;
+    const queued = this.listQueue.shift();
+    return queued ?? this.nextList;
   }
 
   async updateDocument(
@@ -220,6 +228,7 @@ describe('createTask', () => {
       createdBy: 'user-123',
       createdByEmail: 'owner@example.com',
       searchText: 'Prepare invoice Send the October invoice',
+      tags: [],
     });
     // F3b: no `team:` grant — Appwrite rejects roles the creator does not
     // hold (401 for members); admins read via the collection-level grant.
@@ -259,6 +268,7 @@ describe('createTask', () => {
       status: 'open',
       createdBy: 'user-123',
       createdByEmail: 'owner@example.com',
+      tags: [],
     });
   });
 
@@ -277,6 +287,7 @@ describe('createTask', () => {
       createdByEmail: 'owner@example.com',
       bodyHtml: '<p>Acta</p>',
       searchText: 'Reunión Acta',
+      tags: [],
     });
 
     expect(fake.createCalls[0].data.bodyHtml).toBe('<p>Acta</p>');
@@ -615,6 +626,7 @@ describe('updateTask', () => {
       date: '2026-10-09',
       time: '15:30',
       searchText: 'Cita con el cliente Planta norte',
+      tags: [],
     });
 
     expect(fake.updateCalls[0]).toMatchObject({
@@ -654,6 +666,7 @@ describe('updateTask', () => {
         date: '2026-10-01',
         time: '',
         searchText: 'x',
+        tags: [],
       }),
     ).rejects.toMatchObject({ kind: 'unauthorized' });
   });
@@ -669,6 +682,7 @@ describe('updateNote', () => {
       date: '2026-10-09',
       bodyHtml: '<p>Texto nuevo</p>',
       searchText: 'Acuerdo de octubre Texto nuevo',
+      tags: [],
     });
 
     expect(fake.updateCalls[0]).toMatchObject({
@@ -704,6 +718,7 @@ describe('updateNote', () => {
         date: '',
         bodyHtml: '',
         searchText: 'x',
+        tags: [],
       }),
     ).rejects.toMatchObject({ kind: 'not-found' });
   });
@@ -1253,5 +1268,176 @@ describe('calendar date range (PR8 task 8.3, spec calendar-view → Month grid)'
     const queries = parsedQueries(fake.listCalls[0]);
     expect(hasQuery(queries, 'between', 'date')).toBe(true);
     expect(hasQuery(queries, 'equal', 'createdBy')).toBe(false);
+  });
+});
+
+describe('tag filtering (spec task-tagging → Filter the list by tag)', () => {
+  it('adds an exact-membership query on the tags array when the scope carries one', async () => {
+    const fake = new FakeDatabases();
+    const api = createTasksApi(fake, config);
+
+    await api.listTasks({ admin: false, ownerId: 'user-123', tag: 'compras' });
+
+    const queries = parsedQueries(fake.listCalls[0]);
+    expect(queries.find((query) => query.method === 'contains')).toEqual({
+      method: 'contains',
+      attribute: 'tags',
+      values: ['compras'],
+    });
+  });
+
+  it('omits the tag query when the scope carries none', async () => {
+    const fake = new FakeDatabases();
+    const api = createTasksApi(fake, config);
+
+    await api.listTasks(ownerScope);
+
+    expect(hasQuery(parsedQueries(fake.listCalls[0]), 'contains', 'tags')).toBe(
+      false,
+    );
+  });
+
+  it('composes the tag filter with the keyword search and the date range', async () => {
+    const fake = new FakeDatabases();
+    const api = createTasksApi(fake, config);
+
+    await api.searchTasks('factura', {
+      admin: false,
+      ownerId: 'user-123',
+      tag: 'compras',
+      dateFrom: '2026-10-01',
+    });
+
+    const queries = parsedQueries(fake.listCalls[0]);
+    expect(hasQuery(queries, 'search', 'searchText')).toBe(true);
+    expect(hasQuery(queries, 'contains', 'tags')).toBe(true);
+    expect(hasQuery(queries, 'greaterThanEqual', 'date')).toBe(true);
+  });
+
+  it('forwards the tag from the home route params', async () => {
+    const fake = new FakeDatabases();
+
+    await loadHomeTasks(
+      { id: 'user-123' },
+      'cookie-secret',
+      false,
+      { config, databasesFor: () => fake },
+      { tag: 'compras' },
+    );
+
+    expect(hasQuery(parsedQueries(fake.listCalls[0]), 'contains', 'tags')).toBe(
+      true,
+    );
+  });
+});
+
+describe('listTagCounts (spec task-tagging → Tag section)', () => {
+  it('tallies every tag across the caller records, most-used first', async () => {
+    const fake = new FakeDatabases();
+    fake.nextList = {
+      total: 3,
+      documents: [
+        storedDocument('a', { tags: ['compras', 'urgente'] }),
+        storedDocument('b', { tags: ['compras'] }),
+        storedDocument('c', { tags: ['luis'] }),
+      ],
+    };
+    const api = createTasksApi(fake, config);
+
+    expect(await api.listTagCounts(ownerScope)).toEqual([
+      { tag: 'compras', count: 2 },
+      { tag: 'luis', count: 1 },
+      { tag: 'urgente', count: 1 },
+    ]);
+  });
+
+  it('reads ONLY the tags attribute and scopes to the owner', async () => {
+    const fake = new FakeDatabases();
+    const api = createTasksApi(fake, config);
+
+    await api.listTagCounts(ownerScope);
+
+    const queries = parsedQueries(fake.listCalls[0]);
+    expect(queries.find((query) => query.method === 'select')?.values).toEqual([
+      'tags',
+    ]);
+    expect(hasQuery(queries, 'equal', 'createdBy')).toBe(true);
+  });
+
+  it('never adds an owner filter for the admin scope', async () => {
+    const fake = new FakeDatabases();
+    const api = createTasksApi(fake, config);
+
+    await api.listTagCounts(adminScope);
+
+    expect(hasQuery(parsedQueries(fake.listCalls[0]), 'equal', 'createdBy')).toBe(
+      false,
+    );
+  });
+
+  it('ignores records with no tags or a malformed tags value', async () => {
+    const fake = new FakeDatabases();
+    fake.nextList = {
+      total: 3,
+      documents: [
+        storedDocument('a', { tags: ['compras'] }),
+        storedDocument('b', { tags: 'compras' }),
+        storedDocument('c'),
+      ],
+    };
+    const api = createTasksApi(fake, config);
+
+    expect(await api.listTagCounts(ownerScope)).toEqual([
+      { tag: 'compras', count: 1 },
+    ]);
+  });
+
+  it('walks the collection in pages until a short page ends the tally', async () => {
+    const fake = new FakeDatabases();
+    fake.listQueue = [
+      {
+        total: 200,
+        documents: Array.from({ length: TAG_AGGREGATION_PAGE_SIZE }, (_, index) =>
+          storedDocument(`p1-${index}`, { tags: ['compras'] }),
+        ),
+      },
+      { total: 200, documents: [storedDocument('p2-0', { tags: ['urgente'] })] },
+    ];
+    const api = createTasksApi(fake, config);
+
+    const counts = await api.listTagCounts(ownerScope);
+
+    expect(fake.listCalls).toHaveLength(2);
+    expect(counts).toEqual([
+      { tag: 'compras', count: TAG_AGGREGATION_PAGE_SIZE },
+      { tag: 'urgente', count: 1 },
+    ]);
+    expect(hasQuery(parsedQueries(fake.listCalls[1]), 'cursorAfter')).toBe(true);
+  });
+});
+
+describe('toTask tags normalization (spec task-tagging)', () => {
+  it('maps a stored tags array onto the read model', async () => {
+    const fake = new FakeDatabases();
+    fake.nextGet = storedDocument('doc-1', { tags: ['compras', 'urgente'] });
+    const api = createTasksApi(fake, config);
+
+    expect((await api.getTask('doc-1'))?.tags).toEqual(['compras', 'urgente']);
+  });
+
+  it('reads a record written before tagging existed as untagged', async () => {
+    const fake = new FakeDatabases();
+    fake.nextGet = storedDocument('doc-1');
+    const api = createTasksApi(fake, config);
+
+    expect((await api.getTask('doc-1'))?.tags).toEqual([]);
+  });
+
+  it('drops non-string entries from a malformed tags value', async () => {
+    const fake = new FakeDatabases();
+    fake.nextGet = storedDocument('doc-1', { tags: ['compras', 7, null] });
+    const api = createTasksApi(fake, config);
+
+    expect((await api.getTask('doc-1'))?.tags).toEqual(['compras']);
   });
 });

@@ -52,6 +52,7 @@ function makeDeps(
         status: record.status,
         createdBy: record.createdBy,
         createdByEmail: record.createdByEmail,
+        tags: record.tags,
       };
     },
     onInvalid: (state) => {
@@ -102,6 +103,7 @@ describe('performCreateTask', () => {
       createdBy: 'user-123',
       createdByEmail: 'ana@grupoecotech.com',
       searchText: 'Preparar informe Enviar el informe de octubre',
+      tags: [],
     });
     expect(deps.redirects).toEqual([CREATE_SUCCESS_REDIRECT]);
     expect(CREATE_SUCCESS_REDIRECT).toBe('/?created=1');

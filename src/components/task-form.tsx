@@ -11,6 +11,7 @@ import {
   INITIAL_UPDATE_STATE,
   type UpdateTaskState,
 } from '@/lib/task-update';
+import { TAG_INPUT_HINT, formatTags } from '@/lib/tags';
 import {
   DESCRIPTION_MAX_LENGTH,
   TASK_TYPES,
@@ -55,6 +56,7 @@ export function TaskForm({
   recordId,
   createdBy,
   initial,
+  initialTags,
   cancelHref = '/',
   returnTo,
 }: {
@@ -65,6 +67,12 @@ export function TaskForm({
   createdBy?: string;
   /** Server-rendered record values used until the first failed submission. */
   initial?: TaskDraft;
+  /**
+   * The record's stored tags. They arrive as an array, the input holds the
+   * raw comma-separated string, so the form renders them through
+   * `formatTags` — same seeding rules as `initial`.
+   */
+  initialTags?: string[];
   /** Where the Cancel link goes — the calendar modal closes back to itself. */
   cancelHref?: string;
   /** Post-success destination forwarded to the update action (edit mode only). */
@@ -90,7 +98,7 @@ export function TaskForm({
     Object.keys(state.values).length > 0
       ? state.values
       : editing
-        ? (initial ?? {})
+        ? { ...(initial ?? {}), tags: formatTags(initialTags ?? []) }
         : { date: defaultDate };
 
   return (
@@ -192,6 +200,26 @@ export function TaskForm({
           />
           <FieldError message={state.fieldErrors.time} />
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="tags" className="field-label">
+          Etiquetas
+        </label>
+        <input
+          id="tags"
+          name="tags"
+          type="text"
+          defaultValue={values.tags ?? ''}
+          aria-invalid={state.fieldErrors.tags !== undefined}
+          aria-describedby="tags-hint"
+          placeholder="compras, urgente"
+          className="field"
+        />
+        <p id="tags-hint" className="meta">
+          {TAG_INPUT_HINT}
+        </p>
+        <FieldError message={state.fieldErrors.tags} />
       </div>
 
       <div className="flex gap-2">

@@ -28,6 +28,8 @@ import {
 } from '@/lib/appwrite/telegram';
 import { loadHomeTasks, type TaskPage } from '@/lib/appwrite/tasks';
 import { parseHomeQuery, validateDateRange, type RawSearchParams } from '@/lib/search-query';
+import { TAG_FILTER_CLEAR_LABEL, TAG_FILTER_PREFIX } from '@/lib/tags';
+import { buildListHref } from '@/lib/task-view';
 import {
   deriveLinkState,
   telegramEntry,
@@ -82,6 +84,7 @@ async function HomeTasksSection({
   secret,
   admin,
   q,
+  tag,
   from,
   to,
   cursor,
@@ -90,6 +93,7 @@ async function HomeTasksSection({
   secret: string;
   admin: boolean;
   q: string;
+  tag: string;
   from: string;
   to: string;
   cursor: string;
@@ -111,7 +115,7 @@ async function HomeTasksSection({
         databasesFor: (sessionSecret) =>
           new Databases(createSessionClient(sessionSecret)),
       },
-      { q, cursor, from, to },
+      { q, cursor, from, to, tag },
     );
   } catch (error) {
     if (isDomainError(error) && error.kind === 'session-expired') {
@@ -150,6 +154,7 @@ async function HomeTasksSection({
     <TaskList
       page={page}
       q={q}
+      tag={tag}
       from={from}
       to={to}
       cursor={cursor}
@@ -161,9 +166,10 @@ async function HomeTasksSection({
 /**
  * Home (PR3 tasks 4.1–4.3): the task list UI for the signed-in caller —
  * sorted cursor pages from the data layer, keyword search through `?q=`
- * (spec `task-search`), status/type badges, creator attribution, empty and
- * error states (spec `task-listing`), the create entry point, and the
- * success banner after a record is stored (spec `task-registration`).
+ * (spec `task-search`), a tag filter through `?tag=` (spec `task-tagging`),
+ * status/type badges, creator attribution, empty and error states
+ * (spec `task-listing`), the create entry point, and the success banner
+ * after a record is stored (spec `task-registration`).
  */
 export default async function HomePage({
   searchParams,
@@ -182,7 +188,7 @@ export default async function HomePage({
     redirect('/login?error=expired');
   }
 
-  const { q, from, to, cursor, created, updated, deleted } =
+  const { q, tag, from, to, cursor, created, updated, deleted } =
     parseHomeQuery(await searchParams);
   const admin = await isAdmin();
   const telegramState = await loadTelegramEntryState(secret, user.id);
@@ -232,6 +238,9 @@ export default async function HomePage({
             </Link>
             <Link href="/calendario" className="btn btn-secondary">
               Calendario
+            </Link>
+            <Link href="/etiquetas" className="btn btn-secondary">
+              Etiquetas
             </Link>
             <Link href={telegram.href} className="btn btn-secondary">
               {telegram.label}
@@ -283,6 +292,16 @@ export default async function HomePage({
 
         <div className="mx-auto w-full max-w-3xl">
           <SearchForm q={q} from={from} to={to} />
+          {tag !== '' ? (
+            <p className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="badge badge-tag">
+                {TAG_FILTER_PREFIX} {tag}
+              </span>
+              <Link href={buildListHref({ q, from, to })} className="link-quiet">
+                {TAG_FILTER_CLEAR_LABEL}
+              </Link>
+            </p>
+          ) : null}
           {rangeValid ? (
             <div className="mt-4">
               <Suspense fallback={<LoadingState />}>
@@ -291,6 +310,7 @@ export default async function HomePage({
                   secret={secret}
                   admin={admin}
                   q={q}
+                  tag={tag}
                   from={queryFrom}
                   to={queryTo}
                   cursor={cursor}

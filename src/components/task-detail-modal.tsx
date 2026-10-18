@@ -14,6 +14,7 @@ import {
 import { ModalShell } from '@/components/modal-shell';
 import { NoteForm } from '@/components/note-form';
 import { StatusControls } from '@/components/status-controls';
+import { TagChips } from '@/components/tag-chips';
 import { TaskForm } from '@/components/task-form';
 
 /**
@@ -67,6 +68,8 @@ export function TaskDetailModal({
           <span className="meta">{formatCreatedAt(task.$createdAt)}</span>
         </div>
 
+        <TagChips tags={task.tags} />
+
         {isNote ? (
           <NoteForm
             recordId={task.$id}
@@ -76,6 +79,7 @@ export function TaskDetailModal({
               date: task.date,
               bodyHtml: sanitizeNoteHtml(task.bodyHtml ?? ''),
             }}
+            initialTags={task.tags}
             cancelHref={closeHref}
             returnTo={returnTo}
           />
@@ -90,6 +94,7 @@ export function TaskDetailModal({
               date: task.date,
               time: task.time,
             }}
+            initialTags={task.tags}
             cancelHref={closeHref}
             returnTo={returnTo}
           />

@@ -49,6 +49,7 @@ function readDraft(formData: FormData): {
   description?: string;
   date?: string;
   time?: string;
+  tags?: string;
 } {
   return {
     type: String(formData.get('type') ?? ''),
@@ -56,6 +57,7 @@ function readDraft(formData: FormData): {
     description: String(formData.get('description') ?? ''),
     date: String(formData.get('date') ?? ''),
     time: String(formData.get('time') ?? ''),
+    tags: String(formData.get('tags') ?? ''),
   };
 }
 

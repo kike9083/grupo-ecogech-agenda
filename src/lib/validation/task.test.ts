@@ -15,13 +15,20 @@ const validDraft = {
   time: '09:30',
 };
 
+/**
+ * The shape a validated draft has: every input field plus the parsed tag
+ * list (spec `task-tagging`). Tests spread this so a change to the validated
+ * contract fails here instead of drifting silently.
+ */
+const validated = { ...validDraft, tags: [] as string[] };
+
 const owner = { id: 'user-123', email: 'owner@example.com' };
 
 describe('validateTaskDraft', () => {
   it('accepts a valid draft and returns the normalized value', () => {
     const result = validateTaskDraft(validDraft);
 
-    expect(result).toEqual({ ok: true, value: validDraft });
+    expect(result).toEqual({ ok: true, value: validated });
   });
 
   it('trims surrounding whitespace from the title', () => {
@@ -29,7 +36,7 @@ describe('validateTaskDraft', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { ...validDraft, title: 'Pay bills' },
+      value: { ...validated, title: 'Pay bills' },
     });
   });
 
@@ -47,7 +54,7 @@ describe('validateTaskDraft', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { ...validDraft, type: 'note' },
+      value: { ...validated, type: 'note' },
     });
   });
 
@@ -96,7 +103,7 @@ describe('validateTaskDraft', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { ...validDraft, date: '2020-01-15' },
+      value: { ...validated, date: '2020-01-15' },
     });
   });
 
@@ -189,8 +196,64 @@ describe('validateTaskDraft', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { ...validDraft, type: 'request' },
+      value: { ...validated, type: 'request' },
     });
+  });
+});
+
+describe('validateTaskDraft → tags (spec task-tagging)', () => {
+  it('parses the raw comma-separated input into canonical tags', () => {
+    const result = validateTaskDraft({ ...validDraft, tags: 'Compras, URGENTE' });
+
+    expect(result).toEqual({
+      ok: true,
+      value: { ...validated, tags: ['compras', 'urgente'] },
+    });
+  });
+
+  it('treats a missing tags field as an empty list', () => {
+    const result = validateTaskDraft(validDraft);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.tags).toEqual([]);
+    }
+  });
+
+  it('rejects a tag over the length limit', () => {
+    const result = validateTaskDraft({
+      ...validDraft,
+      tags: 'a'.repeat(31),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.tags).toBe(
+        'Cada etiqueta debe tener como máximo 30 caracteres.',
+      );
+    }
+  });
+
+  it('rejects more tags than the per-record limit', () => {
+    const tags = Array.from({ length: 11 }, (_, index) => `t${index}`).join(',');
+
+    const result = validateTaskDraft({ ...validDraft, tags });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.tags).toBe(
+        'Podés usar hasta 10 etiquetas por registro.',
+      );
+    }
+  });
+
+  it('accepts exactly the limit on both axes', () => {
+    const tags = Array.from({ length: 10 }, (_, index) => `t${index}`).join(',');
+
+    expect(validateTaskDraft({ ...validDraft, tags }).ok).toBe(true);
+    expect(
+      validateTaskDraft({ ...validDraft, tags: 'a'.repeat(30) }).ok,
+    ).toBe(true);
   });
 });
 
@@ -218,11 +281,11 @@ describe('buildSearchText', () => {
 
 describe('buildTaskRecord', () => {
   it('fills all nine attributes with server-side defaults (design D1)', () => {
-    const validated = validateTaskDraft(validDraft);
-    expect(validated.ok).toBe(true);
-    if (!validated.ok) return;
+    const result = validateTaskDraft(validDraft);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
 
-    expect(buildTaskRecord(validated.value, owner)).toEqual({
+    expect(buildTaskRecord(result.value, owner)).toEqual({
       type: 'task',
       title: 'Prepare invoice',
       description: 'Send the October invoice to the client',
@@ -232,7 +295,19 @@ describe('buildTaskRecord', () => {
       createdBy: 'user-123',
       createdByEmail: 'owner@example.com',
       searchText: 'Prepare invoice Send the October invoice to the client',
+      tags: [],
     });
+  });
+
+  it('carries the parsed tags onto the record (spec task-tagging)', () => {
+    const result = validateTaskDraft({ ...validDraft, tags: 'Compras,urgente' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(buildTaskRecord(result.value, owner).tags).toEqual([
+      'compras',
+      'urgente',
+    ]);
   });
 });
 

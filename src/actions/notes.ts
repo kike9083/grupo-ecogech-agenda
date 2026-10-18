@@ -28,11 +28,13 @@ function readNoteDraft(formData: FormData): {
   title?: string;
   bodyHtml?: string;
   date?: string;
+  tags?: string;
 } {
   return {
     title: String(formData.get('title') ?? ''),
     bodyHtml: String(formData.get('bodyHtml') ?? ''),
     date: String(formData.get('date') ?? ''),
+    tags: String(formData.get('tags') ?? ''),
   };
 }
 

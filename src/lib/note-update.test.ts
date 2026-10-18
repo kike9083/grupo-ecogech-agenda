@@ -50,6 +50,7 @@ function makeDeps(
         createdBy: 'user-123',
         createdByEmail: 'ana@grupoecotech.com',
         bodyHtml: record.bodyHtml,
+        tags: record.tags,
       } satisfies Task;
     },
     onInvalid: (state) => {
@@ -177,6 +178,7 @@ describe('performUpdateNote', () => {
           date: '2026-10-09',
           bodyHtml: '<p>Texto de la nota</p>',
           searchText: 'Acuerdo de octubre Texto de la nota',
+          tags: [],
         },
       },
     ]);
@@ -184,6 +186,7 @@ describe('performUpdateNote', () => {
       'bodyHtml',
       'date',
       'searchText',
+      'tags',
       'title',
     ]);
     expect(deps.redirects).toEqual([NOTE_UPDATE_SUCCESS_REDIRECT]);

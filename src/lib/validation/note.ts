@@ -1,5 +1,6 @@
 /**
- * Note input validation and record building (spec `note-capture`, design D1).
+ * Note input validation and record building (spec `note-capture`,
+ * `task-tagging`; design D1).
  *
  * Notes are `tasks` records of type `note`: the required task attributes are
  * filled with sentinels — `description`/`time` are always `''`, `status` is an
@@ -11,6 +12,7 @@
  * this module stays importable from client components.
  */
 
+import { parseTags, validateTags } from '@/lib/tags';
 import {
   buildSearchText,
   isRealCalendarDate,
@@ -24,6 +26,8 @@ export interface NoteDraft {
   title?: string;
   bodyHtml?: string;
   date?: string;
+  /** Raw comma-separated tags as typed; `parseTags` turns it into the list. */
+  tags?: string;
 }
 
 /** Draft after validation: every field present, typed, and normalized. */
@@ -32,9 +36,11 @@ export interface ValidatedNoteDraft {
   title: string;
   bodyHtml: string;
   date: string;
+  /** Canonical tags, de-duplicated — the array the record stores. */
+  tags: string[];
 }
 
-export type NoteField = 'title' | 'date';
+export type NoteField = 'title' | 'date' | 'tags';
 
 export type NoteFieldErrors = Partial<Record<NoteField, string>>;
 
@@ -53,6 +59,7 @@ const ERROR_MESSAGES = {
  * "Note creation"): an absent title becomes `''`, an absent date becomes the
  * `''` sentinel that keeps the note out of the calendar. A malformed or
  * impossible date is rejected. `bodyHtml` is normalized to a trimmed string.
+ * `tags` follow the same limits as a task (spec `task-tagging`).
  */
 export function validateNoteDraft(draft: NoteDraft): NoteValidationResult {
   const errors: NoteFieldErrors = {};
@@ -67,6 +74,12 @@ export function validateNoteDraft(draft: NoteDraft): NoteValidationResult {
     errors.date = ERROR_MESSAGES.date;
   }
 
+  const tags = parseTags(draft.tags ?? '');
+  const tagError = validateTags(tags);
+  if (tagError !== null) {
+    errors.tags = tagError;
+  }
+
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors };
   }
@@ -78,6 +91,7 @@ export function validateNoteDraft(draft: NoteDraft): NoteValidationResult {
       title,
       bodyHtml: (draft.bodyHtml ?? '').trim(),
       date: rawDate,
+      tags,
     },
   };
 }
@@ -94,6 +108,7 @@ export interface NoteRecord {
   createdByEmail: string;
   bodyHtml: string;
   searchText: string;
+  tags: string[];
 }
 
 /**
@@ -118,6 +133,7 @@ export function buildNoteRecord(
     createdByEmail: owner.email,
     bodyHtml: draft.bodyHtml,
     searchText: buildSearchText(draft.title, bodyText),
+    tags: draft.tags,
   };
 }
 
@@ -132,6 +148,7 @@ export interface EditableNoteRecord {
   date: string;
   bodyHtml: string;
   searchText: string;
+  tags: string[];
 }
 
 /**
@@ -150,5 +167,6 @@ export function buildNoteUpdate(
     date: draft.date,
     bodyHtml: draft.bodyHtml,
     searchText: buildSearchText(draft.title, bodyText),
+    tags: draft.tags,
   };
 }

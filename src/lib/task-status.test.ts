@@ -21,6 +21,7 @@ function taskStub(overrides: Partial<Task> = {}): Task {
     status: 'in_progress',
     createdBy: 'user-123',
     createdByEmail: 'owner@example.com',
+    tags: [],
     ...overrides,
   };
 }

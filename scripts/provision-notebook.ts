@@ -544,6 +544,75 @@ async function ensureCreatedAtIndex(): Promise<StepOutcome> {
   };
 }
 
+/**
+ * `tags` — the record's labels (spec `task-tagging`, design D1). A string
+ * ARRAY attribute, so one document carries many tags and `Query.contains`
+ * filters on exact membership. Optional on purpose: every record written
+ * before this existed simply has no tags, and the read model normalizes that
+ * to `[]` instead of breaking. `size` is the PER-ELEMENT limit, mirroring
+ * `TAG_MAX_LENGTH`.
+ */
+async function ensureTagsAttribute(): Promise<StepOutcome> {
+  const attributes = await getAttributes();
+  if (attributes.some((entry) => entry.key === 'tags')) {
+    return {
+      step: 'attribute.tags',
+      changed: false,
+      fallback: false,
+      detail: 'tags already present — skipped',
+    };
+  }
+
+  const created = await api('POST', '/attributes/string', {
+    key: 'tags',
+    size: 30,
+    required: false,
+    array: true,
+  });
+  if (created.status !== 202 && created.status !== 201) {
+    throw new Error(`tags create failed: ${describe(created)}`);
+  }
+  await waitForAttribute('tags');
+
+  return {
+    step: 'attribute.tags',
+    changed: true,
+    fallback: false,
+    detail: `createStringAttribute(array) OK (${describe(created)})`,
+  };
+}
+
+/** Key index on the `tags` array so membership filtering stays indexed. */
+async function ensureTagsIndex(): Promise<StepOutcome> {
+  const indexes = await getIndexes();
+  if (indexes.some((entry) => entry.key === 'tags')) {
+    return {
+      step: 'index.tags',
+      changed: false,
+      fallback: false,
+      detail: 'tags index already present — skipped',
+    };
+  }
+
+  const created = await api('POST', '/indexes', {
+    key: 'tags',
+    type: 'key',
+    attributes: ['tags'],
+    orders: ['asc'],
+  });
+  if (created.status !== 202 && created.status !== 201) {
+    throw new Error(`tags index create failed: ${describe(created)}`);
+  }
+  await waitForIndex('tags');
+
+  return {
+    step: 'index.tags',
+    changed: true,
+    fallback: false,
+    detail: `createIndex on tags OK (${describe(created)})`,
+  };
+}
+
 /** Bucket `agenda-attachments` (design D3): fileSecurity, 30 MB, extension allow-list. */
 async function ensureAttachmentsBucket(): Promise<StepOutcome> {
   const existing = await request(
@@ -783,6 +852,8 @@ async function main(): Promise<void> {
   outcomes.push(await ensureNoteEnum());
   outcomes.push(await ensureBodyHtml());
   outcomes.push(await ensureCreatedAtIndex());
+  outcomes.push(await ensureTagsAttribute());
+  outcomes.push(await ensureTagsIndex());
   outcomes.push(await ensureAttachmentsBucket());
   outcomes.push(await ensureAttachmentsCollection());
 

@@ -225,7 +225,8 @@ export function adminEmptyMessage(options: { filtered: boolean }): string {
 /**
  * Builds an `/` URL from the current query state: the cursor carries the
  * next page (design D3 next-link), `q` keeps a keyword search alive across
- * pages and `from`/`to` keep the date range alive (spec `task-search`).
+ * pages, `from`/`to` keep the date range alive (spec `task-search`) and
+ * `tag` keeps the tag filter alive (spec `task-tagging`).
  * Empty pieces are omitted; nothing to carry collapses to the bare route.
  */
 export function buildListHref(params: {
@@ -233,6 +234,7 @@ export function buildListHref(params: {
   q?: string;
   from?: string;
   to?: string;
+  tag?: string;
 }): string {
   const query = new URLSearchParams();
   if (params.q !== undefined && params.q !== '') {
@@ -243,6 +245,9 @@ export function buildListHref(params: {
   }
   if (params.to !== undefined && params.to !== '') {
     query.set('to', params.to);
+  }
+  if (params.tag !== undefined && params.tag !== '') {
+    query.set('tag', params.tag);
   }
   if (params.cursor !== undefined && params.cursor !== '') {
     query.set('cursor', params.cursor);

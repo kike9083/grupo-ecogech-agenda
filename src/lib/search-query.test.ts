@@ -25,6 +25,7 @@ describe('parseHomeQuery', () => {
   it('returns neutral defaults when the route has no query string', () => {
     expect(parseHomeQuery(undefined)).toEqual({
       q: '',
+      tag: '',
       from: '',
       to: '',
       cursor: '',
@@ -40,6 +41,7 @@ describe('parseHomeQuery', () => {
       parseHomeQuery({ q: '  pago ', cursor: ' doc-20 ', created: '1' }),
     ).toEqual({
       q: 'pago',
+      tag: '',
       from: '',
       to: '',
       cursor: 'doc-20',
@@ -53,6 +55,7 @@ describe('parseHomeQuery', () => {
   it('treats a blank keyword as no search (spec task-search → empty query)', () => {
     expect(parseHomeQuery({ q: '   ' })).toEqual({
       q: '',
+      tag: '',
       from: '',
       to: '',
       cursor: '',
@@ -66,6 +69,7 @@ describe('parseHomeQuery', () => {
   it('takes the first value when a parameter repeats (Next allows arrays)', () => {
     expect(parseHomeQuery({ q: ['uno', 'dos'], cursor: ['a', 'b'] })).toEqual({
       q: 'uno',
+      tag: '',
       from: '',
       to: '',
       cursor: 'a',
@@ -226,5 +230,37 @@ describe('validateDateRange (PR9 task 9.1/9.2, spec task-search → Invalid rang
         'Las fechas deben tener el formato AAAA-MM-DD.',
       );
     }
+  });
+});
+
+describe('parseHomeQuery tag filter (spec task-tagging)', () => {
+  it('canonicalizes the tag parameter', () => {
+    expect(parseHomeQuery({ tag: ' Compras ' }).tag).toBe('compras');
+  });
+
+  it('treats a blank or unusable tag as no filter', () => {
+    expect(parseHomeQuery({ tag: '   ' }).tag).toBe('');
+    expect(parseHomeQuery({}).tag).toBe('');
+    expect(parseHomeQuery({ tag: 'a'.repeat(31) }).tag).toBe('');
+  });
+
+  it('flags a tag-only filter as searching, so the empty state reads right', () => {
+    const parsed = parseHomeQuery({ tag: 'compras' });
+
+    expect(parsed.searching).toBe(true);
+    expect(parsed.q).toBe('');
+  });
+
+  it('composes the tag with the keyword and the date range', () => {
+    const parsed = parseHomeQuery({
+      q: ' factura ',
+      tag: 'Compras',
+      from: '2026-10-01',
+    });
+
+    expect(parsed.q).toBe('factura');
+    expect(parsed.tag).toBe('compras');
+    expect(parsed.from).toBe('2026-10-01');
+    expect(parsed.searching).toBe(true);
   });
 });

@@ -2,12 +2,13 @@
  * Home-route query parsing (PR3 task 4.2, spec `task-search`) and admin-route
  * query parsing (PR4 task 5.2, spec `record-visibility` → admin view).
  *
- * The `/?q=&cursor=&created=` and `/admin?status=&type=&creator=&cursor=`
+ * The `/?q=&tag=&cursor=&created=` and `/admin?status=&type=&creator=&cursor=`
  * URLs are the single source of truth for their lists: server-side search
  * and filters (no client state), cursor pagination, and the create success
  * banner. Pure functions — unit-tested in the node environment.
  */
 
+import { normalizeTagParam } from '@/lib/tags';
 import {
   TASK_STATUSES,
   TASK_TYPES,
@@ -22,13 +23,18 @@ export type RawSearchParams = Record<string, string | string[] | undefined>;
 export interface HomeQuery {
   /** Normalized keyword; empty means "plain list" (spec task-search). */
   q: string;
+  /** Canonical tag the list is filtered to; empty means every tag. */
+  tag: string;
   /** Inclusive lower date bound (`YYYY-MM-DD`); empty when unset. */
   from: string;
   /** Inclusive upper date bound (`YYYY-MM-DD`); empty when unset. */
   to: string;
   /** Cursor of the page being displayed; empty on the first page. */
   cursor: string;
-  /** True only when `q` survived normalization — drives the no-results state. */
+  /**
+   * True only when `q` or `tag` survived normalization — drives the
+   * no-results state (spec `task-tagging` → "Filter the list by tag").
+   */
   searching: boolean;
   /** `?created=1` marker set by the task create flow's success redirect. */
   created: boolean;
@@ -59,19 +65,23 @@ export function normalizeSearchTerm(raw: string): string {
  * Reads the home route's query string into a normalized, ready-to-use state.
  * The optional `from`/`to` bounds are kept only when they are real ISO dates —
  * malformed input is dropped (the form shows the inline error separately).
+ * The optional `tag` is canonicalized; an unusable value collapses to `''`,
+ * i.e. "no tag filter", so a hand-typed parameter never reaches a query.
  */
 export function parseHomeQuery(params: RawSearchParams | undefined): HomeQuery {
   const q = normalizeSearchTerm(firstValue(params?.q));
+  const tag = normalizeTagParam(firstValue(params?.tag));
   const cursor = firstValue(params?.cursor).trim();
   const from = normalizeDateParam(firstValue(params?.from));
   const to = normalizeDateParam(firstValue(params?.to));
 
   return {
     q,
+    tag,
     from,
     to,
     cursor,
-    searching: q !== '',
+    searching: q !== '' || tag !== '',
     created: firstValue(params?.created) === '1',
     updated: firstValue(params?.updated) === '1',
     deleted: firstValue(params?.deleted) === '1',

@@ -24,6 +24,7 @@ describe('validateNoteDraft (spec note-capture → Note creation)', () => {
         title: 'Recordatorio',
         bodyHtml: '',
         date: '',
+        tags: [],
       },
     });
   });
@@ -42,6 +43,7 @@ describe('validateNoteDraft (spec note-capture → Note creation)', () => {
         title: 'Reunión',
         bodyHtml: '<p>Acta</p>',
         date: '2026-10-04',
+        tags: [],
       },
     });
   });
@@ -86,6 +88,50 @@ describe('validateNoteDraft (spec note-capture → Note creation)', () => {
   });
 });
 
+describe('validateNoteDraft → tags (spec task-tagging)', () => {
+  it('parses the raw comma-separated input into canonical tags', () => {
+    const result = validateNoteDraft({ title: 'Acta', tags: ' Reunión , acta ' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.tags).toEqual(['reunión', 'acta']);
+    }
+  });
+
+  it('treats a missing tags field as an empty list', () => {
+    const result = validateNoteDraft({ title: 'Acta' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.tags).toEqual([]);
+    }
+  });
+
+  it('rejects an over-long tag with the shared message', () => {
+    const result = validateNoteDraft({ title: 'Acta', tags: 'a'.repeat(31) });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.tags).toBe(
+        'Cada etiqueta debe tener como máximo 30 caracteres.',
+      );
+    }
+  });
+
+  it('rejects more tags than the per-record limit', () => {
+    const tags = Array.from({ length: 11 }, (_, index) => `t${index}`).join(',');
+
+    const result = validateNoteDraft({ title: 'Acta', tags });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.tags).toBe(
+        'Podés usar hasta 10 etiquetas por registro.',
+      );
+    }
+  });
+});
+
 describe('buildNoteRecord (design D1 sentinels)', () => {
   it('fills the sentinels and derives searchText from title plus body text', () => {
     const validated = validateNoteDraft({
@@ -107,7 +153,16 @@ describe('buildNoteRecord (design D1 sentinels)', () => {
       createdByEmail: 'ana@grupoecotech.com',
       bodyHtml: '<p>Acuerdo de <strong>octubre</strong></p>',
       searchText: 'Reunión Acuerdo de octubre',
+      tags: [],
     });
+  });
+
+  it('carries the parsed tags onto the record (spec task-tagging)', () => {
+    const validated = validateNoteDraft({ title: 'Acta', tags: 'compras' });
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+
+    expect(buildNoteRecord(validated.value, owner, '').tags).toEqual(['compras']);
   });
 
   it('keeps every sentinel empty for an untitled, undated note', () => {
@@ -152,7 +207,16 @@ describe('buildNoteUpdate (note edit payload)', () => {
       date: '2026-10-09',
       bodyHtml: '<p>Texto de la nota</p>',
       searchText: 'Acuerdo Texto de la nota',
+      tags: [],
     });
+  });
+
+  it('carries the edited tag list, so tags survive a note edit', () => {
+    const validated = validateNoteDraft({ title: 'Acuerdo', tags: 'compras' });
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+
+    expect(buildNoteUpdate(validated.value, '').tags).toEqual(['compras']);
   });
 
   it('never carries the attributes a note edit must not touch', () => {
@@ -163,7 +227,7 @@ describe('buildNoteUpdate (note edit payload)', () => {
     const keys = Object.keys(buildNoteUpdate(validated.value, 'x'));
 
     expect(keys).toEqual(
-      expect.arrayContaining(['title', 'date', 'bodyHtml', 'searchText']),
+      expect.arrayContaining(['title', 'date', 'bodyHtml', 'searchText', 'tags']),
     );
     for (const forbidden of ['type', 'status', 'time', 'description', 'createdBy']) {
       expect(keys).not.toContain(forbidden);

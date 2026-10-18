@@ -85,13 +85,15 @@ export interface TaskFilters {
 /**
  * Fields shared by every scope (design D5): the cursor continues a page, the
  * optional inclusive `dateFrom`/`dateTo` bounds narrow by the record `date`
- * (the calendar grid range, then the home date filter), and `limit` overrides
+ * (the calendar grid range, then the home date filter), `tag` narrows to the
+ * records carrying that one tag (spec `task-tagging`), and `limit` overrides
  * the default page size for non-paginated views like the calendar.
  */
 export interface TaskScopeBase {
   cursorAfter?: string;
   dateFrom?: string;
   dateTo?: string;
+  tag?: string;
   limit?: number;
 }
 
@@ -112,6 +114,8 @@ export interface Task {
   status: TaskStatus;
   createdBy: string;
   createdByEmail: string;
+  /** Canonical tags; always an array, empty when the record carries none. */
+  tags: string[];
   /** Present only on notes (spec `note-capture`); tasks/requests omit it. */
   bodyHtml?: string;
 }
@@ -122,6 +126,12 @@ export interface TaskPage {
   nextCursor: string | null;
 }
 
+/** One tag plus how many of the caller's records carry it (spec `task-tagging`). */
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
 export const PAGE_SIZE = 20;
 
 /**
@@ -129,6 +139,29 @@ export const PAGE_SIZE = 20;
  * page size instead of paginating (spec `calendar-view` → "place every record").
  */
 export const CALENDAR_PAGE_SIZE = 100;
+
+/**
+ * The tag section aggregates over every record the caller can read, so it
+ * walks the collection in pages and reads ONLY the `tags` attribute — the
+ * `select` keeps each round-trip small (the fulltext body never travels).
+ */
+export const TAG_AGGREGATION_PAGE_SIZE = 100;
+
+/**
+ * Hard stop for that walk. The agenda is an internal tool with hundreds of
+ * records, not millions; the cap keeps a runaway collection from turning the
+ * section into an unbounded loop.
+ */
+export const TAG_AGGREGATION_MAX_PAGES = 50;
+
+/** Reads the `tags` attribute defensively — anything but strings is dropped. */
+function readTags(doc: RawDocument): string[] {
+  const raw = doc.tags;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((entry): entry is string => typeof entry === 'string');
+}
 
 function toTask(doc: RawDocument): Task {
   return {
@@ -142,6 +175,7 @@ function toTask(doc: RawDocument): Task {
     status: doc.status as TaskStatus,
     createdBy: doc.createdBy as string,
     createdByEmail: doc.createdByEmail as string,
+    tags: readTags(doc),
     ...(typeof doc.bodyHtml === 'string' ? { bodyHtml: doc.bodyHtml } : {}),
   };
 }
@@ -187,6 +221,13 @@ function listQueries(scope: TaskScope): string[] {
     }
   } else if (scope.dateTo !== undefined && scope.dateTo !== '') {
     queries.push(Query.lessThanEqual('date', scope.dateTo));
+  }
+
+  // Exact membership on the `tags` array attribute (spec `task-tagging`).
+  // `contains` takes the values as an array even for a single tag; the
+  // parameter is already canonical (`normalizeTagParam`).
+  if (scope.tag !== undefined && scope.tag !== '') {
+    queries.push(Query.contains('tags', [scope.tag]));
   }
 
   if (!scope.admin) {
@@ -291,6 +332,61 @@ export function createTasksApi(
       } catch (error) {
         throw toDomainError(error);
       }
+    },
+
+    /**
+     * Every distinct tag among the caller's records, with how many carry it
+     * (spec `task-tagging` → "Tag section"). Appwrite has no GROUP BY, so the
+     * walk is explicit: `select` fetches only `tags`, `$id`-ordered pages keep
+     * the cursor stable, and the tally happens in memory. Most-used first,
+     * then alphabetical for a deterministic order.
+     */
+    async listTagCounts(scope: TaskScope): Promise<TagCount[]> {
+      const counts = new Map<string, number>();
+      let cursor: string | undefined;
+
+      try {
+        for (let page = 0; page < TAG_AGGREGATION_MAX_PAGES; page++) {
+          const queries = [
+            Query.limit(TAG_AGGREGATION_PAGE_SIZE),
+            Query.select(['tags']),
+            Query.orderAsc('$id'),
+          ];
+          if (!scope.admin) {
+            queries.push(Query.equal('createdBy', scope.ownerId));
+          }
+          if (cursor !== undefined) {
+            queries.push(Query.cursorAfter(cursor));
+          }
+
+          const result = await databases.listDocuments(
+            config.databaseId,
+            config.collectionId,
+            queries,
+          );
+
+          for (const doc of result.documents) {
+            for (const tag of readTags(doc)) {
+              counts.set(tag, (counts.get(tag) ?? 0) + 1);
+            }
+          }
+
+          if (result.documents.length < TAG_AGGREGATION_PAGE_SIZE) {
+            break;
+          }
+          const lastId = result.documents[result.documents.length - 1]?.$id;
+          if (typeof lastId !== 'string') {
+            break;
+          }
+          cursor = lastId;
+        }
+      } catch (error) {
+        throw toDomainError(error);
+      }
+
+      return [...counts.entries()]
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'es'));
     },
 
     /**
@@ -434,6 +530,8 @@ export interface HomeListParams {
   from?: string;
   /** Inclusive upper date bound (`YYYY-MM-DD`) — composes with `q` (task 9.3). */
   to?: string;
+  /** Canonical tag the list is filtered to — absent means every tag. */
+  tag?: string;
 }
 
 /**
@@ -472,11 +570,36 @@ export async function loadHomeTasks(
     scope.dateTo = params.to;
   }
 
+  // Composes with the keyword and the date range exactly like they compose
+  // with each other (spec `task-tagging` → "Filter the list by tag").
+  if (params.tag !== undefined && params.tag !== '') {
+    scope.tag = params.tag;
+  }
+
   const term = (params.q ?? '').trim();
   if (term !== '') {
     return api.searchTasks(term, scope);
   }
   return api.listTasks(scope);
+}
+
+/**
+ * Tag tallies for the `/etiquetas` section, resolved with the caller's own
+ * scope so a member only ever sees the tags on their own records
+ * (spec `task-tagging` → "Tag section", `record-visibility`).
+ */
+export async function loadTagCounts(
+  user: { id: string },
+  sessionSecret: string,
+  admin: boolean,
+  deps: HomeTasksDeps,
+): Promise<TagCount[]> {
+  const api = createTasksApi(deps.databasesFor(sessionSecret), deps.config);
+  const scope: TaskScope = admin
+    ? { admin: true }
+    : { admin: false, ownerId: user.id };
+
+  return api.listTagCounts(scope);
 }
 
 /** Inclusive grid bounds the `/calendario` route passes down (task 8.3). */

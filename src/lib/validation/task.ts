@@ -1,11 +1,13 @@
 /**
  * Task input validation and record building (specs `task-registration`,
- * `task-search`; design D1).
+ * `task-search`, `task-tagging`; design D1).
  *
  * Pure functions only: drafts come in, field errors or a fully populated
- * nine-attribute record come out. Nothing here touches Appwrite — the data
- * layer persists whatever `buildTaskRecord` produces.
+ * record come out. Nothing here touches Appwrite — the data layer persists
+ * whatever `buildTaskRecord` produces.
  */
+
+import { parseTags, validateTags } from '@/lib/tags';
 
 export type TaskType = 'task' | 'request' | 'note' | 'event';
 
@@ -39,6 +41,8 @@ export interface TaskDraft {
   description?: string;
   date?: string;
   time?: string;
+  /** Raw comma-separated tags as typed; `parseTags` turns it into the list. */
+  tags?: string;
 }
 
 /** Draft after validation: every field present, typed, and normalized. */
@@ -48,9 +52,17 @@ export interface ValidatedTaskDraft {
   description: string;
   date: string;
   time: string;
+  /** Canonical tags, de-duplicated — the array the record stores. */
+  tags: string[];
 }
 
-export type TaskField = 'type' | 'title' | 'description' | 'date' | 'time';
+export type TaskField =
+  | 'type'
+  | 'title'
+  | 'description'
+  | 'date'
+  | 'time'
+  | 'tags';
 
 export type TaskFieldErrors = Partial<Record<TaskField, string>>;
 
@@ -96,6 +108,8 @@ export function isRealCalendarDate(value: string): boolean {
  *
  * `description` may be empty (design D1: the form never blocks on it); only
  * its maximum length is enforced. Past dates are valid (backfill scenario).
+ * `tags` are parsed from the raw comma-separated input and rejected only when
+ * a tag is too long or there are too many (spec `task-tagging`).
  */
 export function validateTaskDraft(draft: TaskDraft): TaskValidationResult {
   const errors: TaskFieldErrors = {};
@@ -126,6 +140,12 @@ export function validateTaskDraft(draft: TaskDraft): TaskValidationResult {
     errors.time = ERROR_MESSAGES.time;
   }
 
+  const tags = parseTags(draft.tags ?? '');
+  const tagError = validateTags(tags);
+  if (tagError !== null) {
+    errors.tags = tagError;
+  }
+
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors };
   }
@@ -138,6 +158,7 @@ export function validateTaskDraft(draft: TaskDraft): TaskValidationResult {
       description,
       date,
       time,
+      tags,
     },
   };
 }
@@ -160,7 +181,8 @@ export interface TaskOwner {
 /**
  * The attributes stored in the `tasks` collection (design D1). `bodyHtml` is
  * optional and only present on notes (spec `note-capture`); tasks and requests
- * omit it exactly as before.
+ * omit it exactly as before. `tags` is always sent (possibly empty) so a
+ * record created before tagging existed is only "untagged", never broken.
  */
 export interface TaskRecord {
   type: TaskType;
@@ -172,6 +194,7 @@ export interface TaskRecord {
   createdBy: string;
   createdByEmail: string;
   searchText: string;
+  tags: string[];
   bodyHtml?: string;
 }
 
@@ -194,6 +217,7 @@ export function buildTaskRecord(
     createdBy: owner.id,
     createdByEmail: owner.email,
     searchText: buildSearchText(draft.title, draft.description),
+    tags: draft.tags,
   };
 }
 
@@ -209,6 +233,7 @@ export interface EditableTaskRecord {
   date: string;
   time: string;
   searchText: string;
+  tags: string[];
 }
 
 /** Partial payload for an edit: the validated draft plus the derived index. */
@@ -220,6 +245,7 @@ export function buildTaskUpdate(draft: ValidatedTaskDraft): EditableTaskRecord {
     date: draft.date,
     time: draft.time,
     searchText: buildSearchText(draft.title, draft.description),
+    tags: draft.tags,
   };
 }
 

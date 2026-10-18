@@ -131,6 +131,7 @@ describe('performCreateNote (spec note-capture → Note creation)', () => {
       createdByEmail: 'ana@grupoecotech.com',
       bodyHtml: '<p>Acuerdo de <strong>octubre</strong></p>',
       searchText: 'Reunión Acuerdo de octubre',
+      tags: [],
     });
     // F3b: creator-only grants — a member session cannot grant `team:admins`;
     // admins read through the collection-level grant.

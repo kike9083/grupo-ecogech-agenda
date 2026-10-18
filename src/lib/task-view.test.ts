@@ -34,6 +34,7 @@ function task(overrides: Partial<Task> = {}): Task {
     status: 'open',
     createdBy: 'user-123',
     createdByEmail: 'ana@grupoecotech.com',
+    tags: [],
     ...overrides,
   };
 }
@@ -264,5 +265,16 @@ describe('buildListHref', () => {
   it('carries only the bound that is set', () => {
     expect(buildListHref({ from: '2026-10-01' })).toBe('/?from=2026-10-01');
     expect(buildListHref({ to: '2026-10-15' })).toBe('/?to=2026-10-15');
+  });
+
+  it('keeps the tag filter alive across pages and search (spec task-tagging)', () => {
+    expect(buildListHref({ tag: 'compras' })).toBe('/?tag=compras');
+    expect(buildListHref({ q: 'pago', tag: 'compras', cursor: 'doc-20' })).toBe(
+      '/?q=pago&tag=compras&cursor=doc-20',
+    );
+  });
+
+  it('drops an empty tag instead of emitting a blank parameter', () => {
+    expect(buildListHref({ tag: '' })).toBe('/');
   });
 });
