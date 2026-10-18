@@ -236,6 +236,9 @@ export default async function HomePage({
             <Link href="/nota" className="btn btn-secondary">
               Nueva nota
             </Link>
+            <Link href="/notas" className="btn btn-secondary">
+              Notas
+            </Link>
             <Link href="/calendario" className="btn btn-secondary">
               Calendario
             </Link>

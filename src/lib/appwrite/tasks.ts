@@ -94,6 +94,12 @@ export interface TaskScopeBase {
   dateFrom?: string;
   dateTo?: string;
   tag?: string;
+  /**
+   * Narrows the read to one record type. Available to EVERY scope, unlike the
+   * admin-only `TaskFilters.type`: the notes workspace is a member-facing view
+   * that lists notes only (spec `note-capture` → "Notes workspace").
+   */
+  type?: TaskType;
   limit?: number;
 }
 
@@ -228,6 +234,14 @@ function listQueries(scope: TaskScope): string[] {
   // parameter is already canonical (`normalizeTagParam`).
   if (scope.tag !== undefined && scope.tag !== '') {
     queries.push(Query.contains('tags', [scope.tag]));
+  }
+
+  // Record-type narrowing, applied for every scope (the notes workspace reads
+  // notes only). The admin branch can additionally narrow through its own
+  // filter set below; the two never conflict because they push the same
+  // equality on the same attribute.
+  if (scope.type !== undefined) {
+    queries.push(Query.equal('type', scope.type));
   }
 
   if (!scope.admin) {
@@ -600,6 +614,42 @@ export async function loadTagCounts(
     : { admin: false, ownerId: user.id };
 
   return api.listTagCounts(scope);
+}
+
+/** Query state the `/notas` workspace passes down (spec `note-capture`). */
+export interface NotesListParams {
+  /** Canonical tag the list is filtered to — absent means every note. */
+  tag?: string;
+  /** Cursor of the page being displayed. */
+  cursor?: string;
+}
+
+/**
+ * Server-side results for the `/notas` workspace: the caller's notes, newest
+ * first, optionally narrowed to one tag. Built on the same scope rules as the
+ * home list — admins see every note, members only their own — with `type` set
+ * to `note` so tasks, requests and events never leak into the notes column.
+ */
+export async function loadNoteTasks(
+  user: { id: string },
+  sessionSecret: string,
+  admin: boolean,
+  deps: HomeTasksDeps,
+  params: NotesListParams = {},
+): Promise<TaskPage> {
+  const api = createTasksApi(deps.databasesFor(sessionSecret), deps.config);
+  const scope: TaskScope = admin
+    ? { admin: true, type: 'note' }
+    : { admin: false, ownerId: user.id, type: 'note' };
+
+  if (params.tag !== undefined && params.tag !== '') {
+    scope.tag = params.tag;
+  }
+  if (params.cursor !== undefined && params.cursor !== '') {
+    scope.cursorAfter = params.cursor;
+  }
+
+  return api.listTasks(scope);
 }
 
 /** Inclusive grid bounds the `/calendario` route passes down (task 8.3). */
