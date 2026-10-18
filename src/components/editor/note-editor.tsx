@@ -2,10 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { AudioRecorder } from '@/components/audio-recorder';
 import { EditorToolbar } from './editor-toolbar';
 import { noteEditorExtensions } from './extensions';
 import { IMAGE_ATTACHMENT_ACCEPT } from '@/lib/attachments';
-import { uploadNoteImage } from '@/lib/note-image';
+import { uploadAttachmentFile, uploadNoteImage } from '@/lib/attachment-upload';
 
 /**
  * Rich-text note body editor (spec `note-capture` → "Rich-text body and
@@ -67,6 +68,35 @@ export function NoteEditor({ initialHtml, onChange, recordId }: NoteEditorProps)
     editor.chain().focus().setImage({ src: result.src, alt: file.name }).run();
   }
 
+  /**
+   * Appends a dictated paragraph at the end of the document. The text is
+   * inserted as a ProseMirror node rather than as HTML, so anything the
+   * recognizer returns is content and can never be parsed as markup.
+   */
+  function handleTranscript(text: string): void {
+    if (editor === null) {
+      return;
+    }
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(editor.state.doc.content.size, [
+        { type: 'paragraph', content: [{ type: 'text', text }] },
+      ])
+      .run();
+  }
+
+  /** Stores the dictation audio as an attachment of the open note. */
+  async function handleDictatedAudio(file: File): Promise<void> {
+    if (recordId === undefined) {
+      return;
+    }
+    const result = await uploadAttachmentFile(recordId, file);
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+  }
+
   return (
     <div className="flex flex-col">
       {editor === null ? (
@@ -82,9 +112,21 @@ export function NoteEditor({ initialHtml, onChange, recordId }: NoteEditorProps)
 
       <EditorContent editor={editor} />
 
+      <div className="mt-2">
+        <AudioRecorder
+          onTranscript={handleTranscript}
+          onAudio={
+            recordId === undefined
+              ? undefined
+              : (file) => handleDictatedAudio(file)
+          }
+          disabled={editor === null}
+        />
+      </div>
+
       {recordId === undefined ? (
         <p className="meta mt-1">
-          Guardá la nota para poder adjuntar imágenes.
+          Guardá la nota para adjuntar imágenes y guardar el audio del dictado.
         </p>
       ) : null}
 

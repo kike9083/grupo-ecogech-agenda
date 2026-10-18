@@ -128,6 +128,86 @@ A body MUST be treated as empty only when it carries neither text nor an image. 
 - WHEN it is saved
 - THEN the body is stored as the empty string and the empty state is shown
 
+### Requirement: Notes workspace
+
+The app's main screen MUST be a notes workspace with three panes: the folders, the note list, and the open note. It MUST be reachable at `/notas`, and an authenticated sign-in MUST land on it.
+
+The workspace state MUST live in the URL: a `tag` parameter selects the folder and an `id` parameter selects the note shown in the editor pane, so the browser's back button walks the selection. An unknown `id`, or one that is not a note the caller can read, MUST render the pick-a-note prompt rather than an error.
+
+The list pane MUST hold the caller's notes only — never tasks, requests or events — and MUST offer the entry point to create a note. The header MUST offer the entry point to create a task.
+
+The editor pane MUST reuse the note form and MUST show the open note's attachments together with the upload control, so an image attached to a note is visible without leaving the workspace.
+
+#### Scenario: Sign-in lands on the workspace
+
+- GIVEN valid credentials
+- WHEN the user signs in
+- THEN the notes workspace is shown
+
+#### Scenario: Folder and note selection
+
+- GIVEN a workspace whose notes carry tags
+- WHEN a tag folder is opened and a note is selected
+- THEN the URL carries that tag and that note id, and the editor pane shows the note
+
+#### Scenario: The list holds notes only
+
+- GIVEN a workspace that also has tasks, requests and events
+- WHEN the list renders
+- THEN only notes appear
+
+#### Scenario: Attachments are visible in the workspace
+
+- GIVEN a note with an image attachment
+- WHEN it is open in the editor pane
+- THEN the image is shown there and can be added from there
+
+#### Scenario: Unknown selection degrades
+
+- GIVEN an id that is not a note the caller can read
+- WHEN the workspace renders
+- THEN the pick-a-note prompt is shown instead of an error
+
+### Requirement: Dictation
+
+The note editor and the task form MUST offer a control that listens to the microphone, shows what it is hearing, and appends the settled transcript to the text being authored — the note body and the task description respectively — so a record can be captured without typing.
+
+The transcript MUST be inserted as content and MUST NOT be parsed as markup.
+
+Where the record already exists, the recording MUST also be stored as an audio attachment of that record. Where it does not exist yet, only the transcript is kept and the control MUST NOT claim the audio was saved.
+
+Dictation MUST degrade explicitly: a browser without speech recognition MUST state that limitation in Spanish rather than failing silently, and a denied microphone MUST name the permission.
+
+#### Scenario: Dictate into a note
+
+- GIVEN an open note
+- WHEN the user dictates and stops
+- THEN the transcript is appended to the note body
+
+#### Scenario: Dictate into a task
+
+- GIVEN the task form
+- WHEN the user dictates and stops
+- THEN the transcript is appended to the description
+
+#### Scenario: The audio is kept
+
+- GIVEN an existing note
+- WHEN a dictation ends
+- THEN the recording is stored as an audio attachment of that note
+
+#### Scenario: No record yet
+
+- GIVEN a task that has not been saved
+- WHEN a dictation ends
+- THEN the transcript lands and no attachment is claimed
+
+#### Scenario: Unsupported browser
+
+- GIVEN a browser without the speech recognition API
+- WHEN the dictation control is used
+- THEN a Spanish message states that the browser is unsupported
+
 ### Requirement: Creation timestamp display
 
 A note MUST surface its `createdAt` in Spanish copy consistent with the app ("Anotado el …").

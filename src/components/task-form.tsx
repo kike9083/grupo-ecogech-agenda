@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useRef } from 'react';
 import { createTaskAction, updateTaskAction } from '@/actions/tasks';
+import { AudioRecorder } from '@/components/audio-recorder';
+import { uploadAttachmentFile } from '@/lib/attachment-upload';
+import { joinDictation } from '@/lib/dictation';
 import {
   INITIAL_CREATE_STATE,
   type CreateTaskState,
@@ -79,6 +82,7 @@ export function TaskForm({
   returnTo?: string;
 }) {
   const editing = recordId !== undefined;
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const [createState, createAction, createPending] = useActionState<
     CreateTaskState,
@@ -100,6 +104,30 @@ export function TaskForm({
       : editing
         ? { ...(initial ?? {}), tags: formatTags(initialTags ?? []) }
         : { date: defaultDate };
+
+  /**
+   * Appends a dictated block to the description. The textarea is uncontrolled
+   * (its value is the submitted one), so the insertion goes through the DOM
+   * node and is capped exactly like typing into it would be.
+   */
+  function handleTranscript(text: string): void {
+    const field = descriptionRef.current;
+    if (field === null) {
+      return;
+    }
+    field.value = joinDictation(field.value, text).slice(0, DESCRIPTION_MAX_LENGTH);
+  }
+
+  /** Stores the dictation audio as an attachment — only an existing record can own one. */
+  async function handleDictatedAudio(file: File): Promise<void> {
+    if (recordId === undefined) {
+      return;
+    }
+    const result = await uploadAttachmentFile(recordId, file);
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+  }
 
   return (
     <form action={formAction} className="card flex flex-col gap-4 p-5">
@@ -159,6 +187,7 @@ export function TaskForm({
           Descripción
         </label>
         <textarea
+          ref={descriptionRef}
           id="description"
           name="description"
           rows={4}
@@ -166,6 +195,14 @@ export function TaskForm({
           defaultValue={values.description}
           aria-invalid={state.fieldErrors.description !== undefined}
           className="field"
+        />
+        <AudioRecorder
+          onTranscript={handleTranscript}
+          onAudio={
+            recordId === undefined
+              ? undefined
+              : (file) => handleDictatedAudio(file)
+          }
         />
         <FieldError message={state.fieldErrors.description} />
       </div>
