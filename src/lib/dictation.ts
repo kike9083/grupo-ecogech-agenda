@@ -71,33 +71,96 @@ export interface RecognitionResultsLike {
   [index: number]: RecognitionResultLike | undefined;
 }
 
+/** The transcript so far, plus how far into the results list we have read. */
+export interface TranscriptState {
+  /** Settled text, ready to insert once the user stops. */
+  settled: string;
+}
+
+export const EMPTY_TRANSCRIPT: TranscriptState = Object.freeze({
+  settled: '',
+});
+
 /**
- * Splits the recognizer's accumulated results into the settled text and the
- * phrase still being spoken. `final` is what gets inserted; `interim` is only
- * ever shown as a live preview, because inserting it would rewrite the
- * document on every partial word.
+ * Reads one `result` event's list into the phrase it currently represents.
+ *
+ * Two real-world behaviours live in this list and both have to survive:
+ *
+ * - **Distinct phrases.** The common shape: each finalized entry is the new
+ *   phrase, so the entries are concatenated in order.
+ * - **Cumulative prefixes.** Android Chrome re-delivers the whole session in
+ *   each finalized entry (`"Esto"`, `"Esto es una"`, `"Esto es una prueba"`).
+ *   Concatenating those is exactly the reported bug — "EstoEsto es unaEsto es
+ *   una prueba…". An entry that already starts with what came before it
+ *   REPLACES it instead of being appended.
+ *
+ * Only finalized entries reach the text; the interim tail is returned for the
+ * preview alone, because inserting it would rewrite the document on every
+ * partial word.
  */
-export function splitTranscript(results: RecognitionResultsLike): {
-  final: string;
+function readSession(results: RecognitionResultsLike): {
+  text: string;
   interim: string;
 } {
-  let settled = '';
-  let pending = '';
+  let text = '';
+  let interim = '';
 
   for (let index = 0; index < results.length; index += 1) {
     const result = results[index];
     if (result === undefined) {
       continue;
     }
-    const text = result[0]?.transcript ?? '';
-    if (result.isFinal) {
-      settled += text;
-    } else {
-      pending += text;
+
+    const raw = result[0]?.transcript ?? '';
+    if (!result.isFinal) {
+      interim += raw;
+      continue;
     }
+
+    const cumulative = raw.trim();
+    if (cumulative === '') {
+      continue;
+    }
+
+    text = cumulative.startsWith(text.trim()) ? cumulative : `${text}${raw}`;
   }
 
-  return { final: settled.trim(), interim: pending.trim() };
+  return { text: text.trim(), interim: interim.trim() };
+}
+
+/**
+ * Folds one `result` event into the transcript and returns the phrase still
+ * being spoken for the live preview.
+ *
+ * It is idempotent by design: the session text is recomputed from the whole
+ * list on every event and only ever merged into what was already settled, so a
+ * result the browser delivers twice cannot be counted twice. A recognizer that
+ * restarts after a pause (Android does it on every phrase) hands back a fresh
+ * list that does not overlap the settled text — that session is appended
+ * rather than replacing what was already heard.
+ */
+export function accumulateTranscript(
+  state: TranscriptState,
+  results: RecognitionResultsLike,
+): { state: TranscriptState; interim: string } {
+  const session = readSession(results);
+  const settled = mergeSettled(state.settled, session.text);
+
+  return { state: { settled }, interim: session.interim };
+}
+
+/** Merges a session's text into what was already settled, without repeating it. */
+function mergeSettled(settled: string, session: string): string {
+  if (session === '') {
+    return settled;
+  }
+  if (settled === '' || session.startsWith(settled)) {
+    return session;
+  }
+  if (settled.startsWith(session)) {
+    return settled;
+  }
+  return `${settled} ${session}`;
 }
 
 /**

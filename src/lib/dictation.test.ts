@@ -3,13 +3,14 @@ import {
   DICTATION_DENIED_MESSAGE,
   DICTATION_FAILURE_MESSAGE,
   DICTATION_NO_SPEECH_MESSAGE,
+  EMPTY_TRANSCRIPT,
+  accumulateTranscript,
   audioFileName,
   dictationErrorMessage,
   formatElapsed,
   hasSpeechRecognition,
   joinDictation,
   pickAudioMimeType,
-  splitTranscript,
   type RecognitionResultsLike,
 } from './dictation';
 
@@ -25,32 +26,81 @@ function results(
   return Object.assign(list, { length: list.length }) as RecognitionResultsLike;
 }
 
-describe('splitTranscript', () => {
-  it('separates the settled text from the phrase still being spoken', () => {
-    const { final, interim } = splitTranscript(
-      results([
+/** Feeds a sequence of `result` events through the accumulator, as Chrome would. */
+function run(events: Array<Array<{ text: string; final: boolean }>>) {
+  let state = EMPTY_TRANSCRIPT;
+  let interim = '';
+  for (const event of events) {
+    const next = accumulateTranscript(state, results(event));
+    state = next.state;
+    interim = next.interim;
+  }
+  return { settled: state.settled.trim(), interim };
+}
+
+describe('accumulateTranscript', () => {
+  it('joins distinct phrases as the results list grows', () => {
+    // The common shape: the list accumulates one entry per finalized phrase.
+    const { settled } = run([
+      [{ text: 'llamar a la empresa', final: true }],
+      [
         { text: 'llamar a la empresa', final: true },
-        { text: ' y pedir', final: false },
-      ]),
-    );
+        { text: ' y pedir presupuesto', final: true },
+      ],
+    ]);
 
-    expect(final).toBe('llamar a la empresa');
-    expect(interim).toBe('y pedir');
+    expect(settled).toBe('llamar a la empresa y pedir presupuesto');
   });
 
-  it('joins several settled fragments in order', () => {
-    const { final } = splitTranscript(
-      results([
-        { text: 'uno ', final: true },
-        { text: 'dos', final: true },
-      ]),
-    );
+  it('replaces instead of appending when each entry repeats the whole session', () => {
+    // Android Chrome reports cumulative prefixes in each finalized entry.
+    // Concatenating them produced "EstoEsto es unaEsto es una prueba…".
+    const { settled } = run([
+      [{ text: 'Esto', final: true }],
+      [{ text: 'Esto es una', final: true }],
+      [{ text: 'Esto es una prueba', final: true }],
+    ]);
 
-    expect(final).toBe('uno dos');
+    expect(settled).toBe('Esto es una prueba');
   });
 
-  it('returns empty strings when nothing was heard', () => {
-    expect(splitTranscript(results([]))).toEqual({ final: '', interim: '' });
+  it('exposes the phrase still being spoken without settling it', () => {
+    const { settled, interim } = run([
+      [{ text: 'reunión de octubre', final: true }],
+      [
+        { text: 'reunión de octubre', final: true },
+        { text: ' y ver', final: false },
+      ],
+    ]);
+
+    expect(settled).toBe('reunión de octubre');
+    expect(interim).toBe('y ver');
+  });
+
+  it('appends a fresh session after the recognizer restarts', () => {
+    // A restart hands back a list that does not overlap what was heard.
+    const { settled } = run([
+      [{ text: 'primera frase', final: true }],
+      [{ text: 'segunda frase', final: true }],
+    ]);
+
+    expect(settled).toBe('primera frase segunda frase');
+  });
+
+  it('is idempotent when the browser delivers the same list twice', () => {
+    const { settled } = run([
+      [{ text: 'hola', final: true }],
+      [{ text: 'hola', final: true }],
+    ]);
+
+    expect(settled).toBe('hola');
+  });
+
+  it('returns an empty state for an event with no results', () => {
+    const next = accumulateTranscript(EMPTY_TRANSCRIPT, results([]));
+
+    expect(next.state).toEqual({ settled: '' });
+    expect(next.interim).toBe('');
   });
 });
 

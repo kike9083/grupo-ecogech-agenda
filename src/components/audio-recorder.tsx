@@ -11,12 +11,14 @@ import {
   DICTATION_RECORDING_LABEL,
   DICTATION_STOP_LABEL,
   DICTATION_UNSUPPORTED_MESSAGE,
+  EMPTY_TRANSCRIPT,
+  accumulateTranscript,
   audioFileName,
   dictationErrorMessage,
   formatElapsed,
   pickAudioMimeType,
-  splitTranscript,
   type RecognitionResultsLike,
+  type TranscriptState,
 } from '@/lib/dictation';
 
 /**
@@ -98,7 +100,10 @@ export function AudioRecorder({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const settledRef = useRef('');
+  const transcriptRef = useRef<TranscriptState>(EMPTY_TRANSCRIPT);
+  // The last phrase still being spoken, kept only as a fallback for a
+  // recording stopped before the recognizer finalized it.
+  const interimRef = useRef('');
   const mimeRef = useRef<string | null>(null);
   const timerRef = useRef<number | null>(null);
   // The recognizer's own `onend` and the stop handler both read this, so it
@@ -152,7 +157,8 @@ export function AudioRecorder({
     setError(null);
     setPreview('');
     setElapsed(0);
-    settledRef.current = '';
+    transcriptRef.current = EMPTY_TRANSCRIPT;
+    interimRef.current = '';
     chunksRef.current = [];
     mimeRef.current = null;
 
@@ -191,9 +197,14 @@ export function AudioRecorder({
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
-      const { final, interim } = splitTranscript(event.results);
-      settledRef.current = final;
-      setPreview([final, interim].filter((part) => part !== '').join(' '));
+      const next = accumulateTranscript(transcriptRef.current, event.results);
+      transcriptRef.current = next.state;
+      interimRef.current = next.interim;
+      setPreview(
+        [next.state.settled, next.interim]
+          .filter((part) => part !== '')
+          .join(' '),
+      );
     };
     recognition.onerror = (event) => {
       fail(dictationErrorMessage(event.error));
@@ -252,7 +263,11 @@ export function AudioRecorder({
     }
     releaseStream();
 
-    const text = settledRef.current.trim();
+    // The recognizer may not have finalized the last phrase yet; falling back
+    // to what was on screen keeps a short utterance from being lost.
+    const text = (transcriptRef.current.settled.trim() || interimRef.current).trim();
+    transcriptRef.current = EMPTY_TRANSCRIPT;
+    interimRef.current = '';
     setPreview('');
     setElapsed(0);
 
