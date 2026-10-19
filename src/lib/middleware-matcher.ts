@@ -15,6 +15,13 @@
  * redirect it to `/` before the exchange could run. The route self-authenticates
  * with the `x-link-secret` shared secret instead.
  *
+ * `/sw.js` and `*.webmanifest` are excluded for the installable app (spec
+ * `pwa`): the browser fetches both WITHOUT the page's session, so a gate that
+ * bounced them to `/login` would hand back an HTML page where a service worker
+ * script and a JSON manifest are expected — registration would fail and the
+ * install prompt would never appear. The generated icons are already covered
+ * by the `png` extension exclusion.
+ *
  * Kept as a plain module (no `next/server` import) so the matcher contract is
  * unit-testable in the node environment. `src/middleware.ts` inlines the same
  * string (Turbopack cannot statically parse an imported `config.matcher`);
@@ -22,7 +29,7 @@
  * sync.
  */
 export const MIDDLEWARE_MATCHER = [
-  '/((?!_next/static|_next/image|favicon.ico|api/attachments/upload|api/telegram/link|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  '/((?!_next/static|_next/image|favicon.ico|sw.js|api/attachments/upload|api/telegram/link|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
 ] as const;
 
 /**

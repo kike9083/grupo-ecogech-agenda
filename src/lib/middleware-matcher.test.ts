@@ -63,3 +63,32 @@ describe('middleware matcher (design D4 — telegram callback exclusion)', () =>
     expect(matchesMiddleware('/favicon.ico')).toBe(false);
   });
 });
+
+/**
+ * Spec `pwa` → "Installable app": the browser fetches the worker script and
+ * the manifest without the page's session, so the presence gate must not
+ * answer them with a redirect to `/login` — it would hand back HTML where a
+ * script and a JSON document are expected, and the install prompt would never
+ * appear.
+ */
+describe('middleware matcher (spec pwa — installability assets)', () => {
+  it('excludes the service worker script', () => {
+    expect(matchesMiddleware('/sw.js')).toBe(false);
+  });
+
+  it('excludes the web app manifest', () => {
+    expect(matchesMiddleware('/manifest.webmanifest')).toBe(false);
+  });
+
+  it('excludes the generated icons', () => {
+    expect(matchesMiddleware('/icon-192.png')).toBe(false);
+    expect(matchesMiddleware('/icon-512.png')).toBe(false);
+    expect(matchesMiddleware('/icon-maskable-512.png')).toBe(false);
+    expect(matchesMiddleware('/apple-touch-icon.png')).toBe(false);
+  });
+
+  it('still gates the app routes', () => {
+    expect(matchesMiddleware('/notas')).toBe(true);
+    expect(matchesMiddleware('/nueva')).toBe(true);
+  });
+});

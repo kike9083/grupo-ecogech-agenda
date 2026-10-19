@@ -31,7 +31,7 @@ export function middleware(request: NextRequest): NextResponse {
   }
 
   if (hasSession && isLoginRoute) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL('/notas', request.url));
   }
 
   return NextResponse.next();
@@ -48,12 +48,15 @@ export function middleware(request: NextRequest): NextResponse {
  * at the 10 MB middleware cap (verify F1); `/api/telegram/link` is excluded
  * because the bot callback has no `aw_session` cookie and the route
  * self-authenticates with the `x-link-secret` shared secret (design D4).
- * Every other route keeps the presence gate, and the upload route
- * authenticates itself via `getCurrentUser()` (401 when the session is
- * missing).
+ * `/sw.js` and `*.webmanifest` are excluded for the installable app (spec
+ * `pwa`): the browser fetches both without the page's session, and a gate that
+ * bounced them to `/login` would return HTML where a worker script and a JSON
+ * manifest are expected. Every other route keeps the presence gate, and the
+ * upload route authenticates itself via `getCurrentUser()` (401 when the
+ * session is missing).
  */
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/attachments/upload|api/telegram/link|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|api/attachments/upload|api/telegram/link|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
   ],
 };

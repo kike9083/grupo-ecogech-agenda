@@ -50,11 +50,11 @@ describe('middleware presence gate', () => {
     expect(response.headers.get('location')).toBeNull();
   });
 
-  it('redirects a cookie-carrying visitor away from /login to /', () => {
+  it('redirects a cookie-carrying visitor away from /login to the workspace', () => {
     const response = middleware(requestTo('/login', 'aw_session=secret-value'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('http://localhost/');
+    expect(response.headers.get('location')).toBe('http://localhost/notas');
   });
 
   it('treats an empty aw_session value as no session', () => {
@@ -86,6 +86,6 @@ describe('middleware presence gate', () => {
     const response = middleware(requestTo('/login?error=credentials', 'aw_session=stale'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('http://localhost/');
+    expect(response.headers.get('location')).toBe('http://localhost/notas');
   });
 });
