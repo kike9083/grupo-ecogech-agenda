@@ -7,41 +7,47 @@ import {
 } from '@/lib/notes-workspace';
 
 /**
- * First column of the notes workspace (spec `note-capture` → "Notes
- * workspace"): the folders list, Apple-Notes style. The synthetic "Todas las
- * notas" entry always comes first so an unfiltered view is one click away,
- * followed by every tag the caller's notes carry, each with its count.
+ * First column of the workspace (spec `note-capture` → "Notes workspace").
+ *
+ * Two ladders: the record types the workspace can show (Todo, Notas, Tareas,
+ * Solicitudes, Citas) and the tags the caller's records carry, most-used
+ * first. Both keep the rest of the query alive, so narrowing by type does not
+ * drop the keyword or the folder and vice versa.
  *
  * A server component: it renders links and text only, so the workspace keeps
- * its state in the URL (`?tag=`) exactly like the rest of the app.
+ * its state in the URL (`?type=`, `?tag=`) exactly like the rest of the app.
  */
-export function NotesSidebar({ folders }: { folders: NotesFolder[] }) {
-  const [all, ...tags] = folders;
-
+export function NotesSidebar({
+  typeFilters,
+  tagFolders,
+}: {
+  typeFilters: NotesFolder[];
+  tagFolders: NotesFolder[];
+}) {
   return (
     <aside className="flex flex-col gap-5 border-hairline bg-surface-sunken/50 p-4 md:min-h-0 md:overflow-y-auto md:border-r">
       <div>
         <h2 className="meta font-semibold tracking-wide uppercase">
           {NOTES_FOLDERS_HEADING}
         </h2>
-        {all === undefined ? null : (
-          <ul className="mt-2 flex flex-col gap-1">
-            <li>
-              <FolderLink folder={all} />
+        <ul className="mt-2 flex flex-col gap-1">
+          {typeFilters.map((folder) => (
+            <li key={folder.tag === '' ? 'all' : folder.tag}>
+              <FolderLink folder={folder} />
             </li>
-          </ul>
-        )}
+          ))}
+        </ul>
       </div>
 
       <div className="min-h-0">
         <h2 className="meta font-semibold tracking-wide uppercase">
           {NOTES_TAGS_HEADING}
         </h2>
-        {tags.length === 0 ? (
+        {tagFolders.length === 0 ? (
           <p className="meta mt-2">{NOTES_NO_TAGS_MESSAGE}</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1">
-            {tags.map((folder) => (
+            {tagFolders.map((folder) => (
               <li key={folder.tag}>
                 <FolderLink folder={folder} />
               </li>

@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Databases, Storage } from 'node-appwrite';
+import { AppHeader } from '@/components/app-header';
 import { AttachmentForm } from '@/components/attachment-form';
 import { AttachmentGallery } from '@/components/attachment-gallery';
 import { NoteForm } from '@/components/note-form';
 import { NotesList } from '@/components/notes-list';
 import { NotesSidebar } from '@/components/notes-sidebar';
+import { TaskForm } from '@/components/task-form';
 import {
   ATTACHMENTS_BUCKET_ID,
   ATTACHMENTS_COLLECTION_ID,
@@ -21,8 +23,8 @@ import {
 } from '@/lib/appwrite/session';
 import {
   createTasksApi,
-  loadNoteTasks,
   loadTagCounts,
+  loadWorkspaceRecords,
   type TagCount,
   type Task,
   type TaskPage,
@@ -36,30 +38,33 @@ import {
   NOTES_SELECT_PROMPT,
   NOTES_SUBTITLE,
   NOTES_TITLE,
-  buildNotesFolders,
   buildNotesHref,
+  buildTagFolders,
+  buildTypeFilters,
   resolveNotesEditorState,
-  toNoteListItem,
-  type NoteListItem,
+  toWorkspaceListItem,
+  type WorkspaceListItem,
 } from '@/lib/notes-workspace';
 import { plainTextFromHtml, sanitizeNoteHtml } from '@/lib/rich-text';
-import type { RawSearchParams } from '@/lib/search-query';
+import { normalizeSearchTerm, type RawSearchParams } from '@/lib/search-query';
 import { normalizeTagParam } from '@/lib/tags';
-import { formatNotedAt } from '@/lib/task-view';
+import { formatCreatedAt, formatNotedAt } from '@/lib/task-view';
+import { TASK_TYPES } from '@/lib/validation/task';
 
 /**
- * Notes workspace (spec `note-capture` → "Notes workspace"): the three-pane
- * layout the Apple Notes quick-note screen uses — folders on the left, the
- * note list in the middle, the open note on the right.
+ * Workspace (spec `note-capture` → "Notes workspace"): the three-pane layout
+ * the Apple Notes quick-note screen uses — folders on the left, the list in
+ * the middle, the open record on the right.
+ *
+ * It is the app's main screen: `/` redirects here and the header's brand
+ * points here. The middle column therefore holds every kind of record, not
+ * only notes, and the right pane renders `NoteForm` for a note and `TaskForm`
+ * for anything else.
  *
  * Every piece of state lives in the URL, like the calendar modal (design D4):
- * `?tag=` picks the folder, `?id=` picks the note shown in the editor pane. So
- * a pane is never a client-side island, the browser's back button walks the
- * selection, and a link to one note is just a link.
- *
- * The editor pane reuses `NoteForm`, which is already the single authoring
- * surface for a note (Tiptap body, title, date, tags) — the workspace changes
- * where it is shown, not what it does.
+ * `?type=` the type filter, `?tag=` the folder, `?q=` the keyword and `?id=`
+ * the open record. So a pane is never a client-side island, the browser's back
+ * button walks the selection, and a link to one record is just a link.
  */
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? '';
@@ -81,8 +86,12 @@ export default async function NotasPage({
   }
 
   const params = await searchParams;
+  const rawType = first(params.type).trim();
+  // An unknown type is ignored rather than passed to the query layer.
+  const type = (TASK_TYPES as readonly string[]).includes(rawType) ? rawType : '';
   // Same canonicalization the list query expects for a tag param.
   const tag = normalizeTagParam(first(params.tag));
+  const q = normalizeSearchTerm(first(params.q));
   const selectedId = first(params.id).trim();
 
   const admin = await isAdmin();
@@ -97,10 +106,14 @@ export default async function NotasPage({
       new Databases(createSessionClient(sessionSecret)),
   };
 
-  // Middle column: the caller's notes, optionally narrowed to one tag.
+  // Middle column: the caller's records, narrowed by the URL state.
   let page: TaskPage | null = null;
   try {
-    page = await loadNoteTasks(user, secret, admin, deps, { tag });
+    page = await loadWorkspaceRecords(user, secret, admin, deps, {
+      type: type === '' ? undefined : (type as Task['type']),
+      tag,
+      q,
+    });
   } catch (error) {
     if (isDomainError(error) && error.kind === 'session-expired') {
       redirect('/login?error=expired');
@@ -108,38 +121,42 @@ export default async function NotasPage({
     // Any other failure degrades to the error state in the list column.
   }
 
-  // Left column: the folders. A failure here never hides the notes.
+  // Left column: the folders. A failure here never hides the list.
   let counts: TagCount[] = [];
   try {
     counts = await loadTagCounts(user, secret, admin, deps);
   } catch {
-    // Leave the tag folders empty — "Todas las notas" still renders.
+    // Leave the tag folders empty — the type ladder still renders.
   }
 
-  // Right column: the open note. A record that is not a note (or that the
-  // caller cannot read) resolves to the prompt rather than to a broken pane.
+  // Right column: the open record. Anything the caller cannot read resolves to
+  // the prompt rather than to a broken pane.
   let selected: Task | null = null;
-  let noteFailed = false;
+  let recordFailed = false;
   if (selectedId !== '') {
     try {
       const api = createTasksApi(deps.databasesFor(secret), deps.config);
-      const found = await api.getTask(selectedId);
-      selected = found !== null && found.type === 'note' ? found : null;
+      selected = await api.getTask(selectedId);
     } catch {
-      noteFailed = true;
+      recordFailed = true;
     }
   }
 
-  const items: NoteListItem[] =
+  const items: WorkspaceListItem[] =
     page === null
       ? []
-      : page.tasks.map((note) =>
-          toNoteListItem(note, plainTextFromHtml(note.bodyHtml ?? '')),
+      : page.tasks.map((record) =>
+          toWorkspaceListItem(
+            record,
+            record.type === 'note'
+              ? plainTextFromHtml(record.bodyHtml ?? '')
+              : (record.description ?? ''),
+          ),
         );
 
-  // Right column, below the editor: the open note's attachments. Loaded
-  // exactly like `/editar` does — a session-scoped read for the record list
-  // plus the API-key client for storage — and a failure never hides the note.
+  // Below the editor: the open record's attachments. Loaded exactly like
+  // `/editar` does — a session-scoped read for the record list plus the
+  // API-key client for storage — and a failure never hides the record.
   let attachments: Attachment[] = [];
   if (selected !== null) {
     try {
@@ -154,69 +171,28 @@ export default async function NotasPage({
         },
       ).listAttachmentsForRecords([selected.$id]);
     } catch {
-      // Leave the gallery empty — the note is still editable.
+      // Leave the gallery empty — the record is still editable.
     }
   }
 
-  const folders = buildNotesFolders(counts, tag);
-  const editor = resolveNotesEditorState(selected, noteFailed);
+  const typeFilters = buildTypeFilters(type, { tag, q });
+  const tagFolders = buildTagFolders(counts, tag, { type, q });
+  const editor = resolveNotesEditorState(selected, recordFailed);
+  const returnTo = buildNotesHref({ type, tag, q, id: selectedId });
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="frosted">
-        <div className="page-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
-          <div className="flex items-center gap-2.5">
-            <span
-              aria-hidden="true"
-              className="flex size-9 items-center justify-center rounded-xl bg-accent-soft"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="size-5 text-accent"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
-                <path d="M14 3v5h5" />
-                <path d="M8 13h8M8 17h5" />
-              </svg>
-            </span>
-            <div className="flex flex-col leading-tight">
-              <h1 className="text-base font-bold">{NOTES_TITLE}</h1>
-              <span className="meta">{NOTES_SUBTITLE}</span>
-            </div>
-          </div>
-
-          <nav className="flex flex-wrap items-center justify-end gap-2">
-            <Link href="/nota" className="btn btn-primary">
-              {NOTES_NEW_LABEL}
-            </Link>
-            <Link href="/nueva" className="btn btn-secondary">
-              {NOTES_NEW_TASK_LABEL}
-            </Link>
-            <Link href="/" className="btn btn-secondary">
-              Agenda
-            </Link>
-            <Link href="/calendario" className="btn btn-secondary">
-              Calendario
-            </Link>
-            <Link href="/etiquetas" className="btn btn-secondary">
-              Etiquetas
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <AppHeader />
 
       <div className="flex flex-col md:grid md:min-h-0 md:flex-1 md:grid-cols-[15rem_19rem_minmax(0,1fr)]">
-        <NotesSidebar folders={folders} />
+        <NotesSidebar typeFilters={typeFilters} tagFolders={tagFolders} />
 
         <NotesList
           items={items}
           activeId={selectedId}
+          type={type}
           tag={tag}
+          q={q}
           failed={page === null}
         />
 
@@ -228,32 +204,59 @@ export default async function NotasPage({
           ) : editor.kind === 'empty' ? (
             <div className="flex h-full min-h-48 flex-col items-center justify-center gap-3 text-center">
               <p className="text-sm text-ink-muted">{NOTES_SELECT_PROMPT}</p>
-              <Link href="/nota" className="btn btn-primary btn-sm">
-                {NOTES_NEW_LABEL}
-              </Link>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link href="/nota" className="btn btn-primary btn-sm">
+                  {NOTES_NEW_LABEL}
+                </Link>
+                <Link href="/nueva" className="btn btn-secondary btn-sm">
+                  {NOTES_NEW_TASK_LABEL}
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
-              <p className="meta">{formatNotedAt(editor.note.$createdAt)}</p>
-              <NoteForm
-                recordId={editor.note.$id}
-                createdBy={editor.note.createdBy}
-                initial={{
-                  title: editor.note.title,
-                  date: editor.note.date,
-                  bodyHtml: sanitizeNoteHtml(editor.note.bodyHtml ?? ''),
-                }}
-                initialTags={editor.note.tags}
-                cancelHref={buildNotesHref({ tag, id: editor.note.$id })}
-                returnTo={buildNotesHref({ tag, id: editor.note.$id })}
-              />
+              <p className="meta">
+                {editor.record.type === 'note'
+                  ? formatNotedAt(editor.record.$createdAt)
+                  : formatCreatedAt(editor.record.$createdAt)}
+              </p>
+
+              {editor.record.type === 'note' ? (
+                <NoteForm
+                  recordId={editor.record.$id}
+                  createdBy={editor.record.createdBy}
+                  initial={{
+                    title: editor.record.title,
+                    date: editor.record.date,
+                    bodyHtml: sanitizeNoteHtml(editor.record.bodyHtml ?? ''),
+                  }}
+                  initialTags={editor.record.tags}
+                  cancelHref={returnTo}
+                  returnTo={returnTo}
+                />
+              ) : (
+                <TaskForm
+                  recordId={editor.record.$id}
+                  createdBy={editor.record.createdBy}
+                  initial={{
+                    type: editor.record.type,
+                    title: editor.record.title ?? '',
+                    description: editor.record.description ?? '',
+                    date: editor.record.date ?? '',
+                    time: editor.record.time ?? '',
+                  }}
+                  initialTags={editor.record.tags}
+                  cancelHref={returnTo}
+                  returnTo={returnTo}
+                />
+              )}
 
               <section className="card flex flex-col gap-3 p-5">
                 <h3 className="text-sm font-semibold">
                   {NOTES_ATTACHMENTS_HEADING}
                 </h3>
                 <AttachmentGallery attachments={attachments} />
-                <AttachmentForm recordId={editor.note.$id} />
+                <AttachmentForm recordId={editor.record.$id} />
               </section>
             </div>
           )}

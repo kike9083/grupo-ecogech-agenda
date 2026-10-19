@@ -89,16 +89,6 @@ export default async function EtiquetasPage({
     <PageShell
       title={TAGS_SECTION_TITLE}
       subtitle={TAGS_SECTION_SUBTITLE}
-      actions={
-        <>
-          <Link href="/" className="btn btn-secondary">
-            Lista
-          </Link>
-          <Link href="/calendario" className="btn btn-ghost">
-            Calendario
-          </Link>
-        </>
-      }
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <form method="get" action="/etiquetas" className="card flex flex-wrap items-end gap-3 p-4">

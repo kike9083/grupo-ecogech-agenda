@@ -4,17 +4,20 @@ import { NOTE_EMPTY_HEADING } from '@/lib/task-view';
 import {
   NOTES_ALL_LABEL,
   NOTES_EMPTY_MESSAGE,
+  NOTES_EMPTY_TASK_HEADING,
   NOTES_EMPTY_TAG_MESSAGE,
-  buildNotesFolders,
   buildNotesHref,
+  buildTagFolders,
+  buildTypeFilters,
+  hasActiveFilter,
   notesEmptyMessage,
   resolveNotesEditorState,
-  toNoteListItem,
+  toWorkspaceListItem,
 } from './notes-workspace';
 
-function note(overrides: Partial<Task> = {}): Task {
+function record(overrides: Partial<Task> = {}): Task {
   return {
-    $id: 'n1',
+    $id: 'r1',
     $createdAt: '2026-10-04T12:00:00.000+00:00',
     type: 'note',
     title: '',
@@ -32,89 +35,119 @@ function note(overrides: Partial<Task> = {}): Task {
 describe('buildNotesHref', () => {
   it('collapses an empty state to the bare route', () => {
     expect(buildNotesHref({})).toBe('/notas');
-    expect(buildNotesHref({ tag: '', id: '' })).toBe('/notas');
+    expect(buildNotesHref({ type: '', tag: '', q: '', id: '' })).toBe('/notas');
   });
 
-  it('carries the folder and the open note', () => {
+  it('carries the type filter, the folder, the keyword and the open record', () => {
+    expect(buildNotesHref({ type: 'task' })).toBe('/notas?type=task');
     expect(buildNotesHref({ tag: 'compras' })).toBe('/notas?tag=compras');
-    expect(buildNotesHref({ id: 'n1' })).toBe('/notas?id=n1');
-    expect(buildNotesHref({ tag: 'compras', id: 'n1' })).toBe(
-      '/notas?tag=compras&id=n1',
-    );
+    expect(buildNotesHref({ q: 'pago' })).toBe('/notas?q=pago');
+    expect(buildNotesHref({ id: 'r1' })).toBe('/notas?id=r1');
+    expect(
+      buildNotesHref({ type: 'note', tag: 'compras', q: 'pago', id: 'r1' }),
+    ).toBe('/notas?type=note&tag=compras&q=pago&id=r1');
   });
 });
 
-describe('toNoteListItem', () => {
-  it('prefers the title over the body snippet', () => {
-    const item = toNoteListItem(note({ title: 'Lista del súper' }), 'comprar pan');
+describe('toWorkspaceListItem', () => {
+  it('prefers a note title over its body snippet', () => {
+    const item = toWorkspaceListItem(
+      record({ title: 'Lista del súper' }),
+      'comprar pan',
+    );
 
     expect(item.heading).toBe('Lista del súper');
     expect(item.snippet).toBe('comprar pan');
-    expect(item.id).toBe('n1');
+    expect(item.type).toBe('note');
+    expect(item.when).toBe('Anotado el 4 de octubre de 2026');
   });
 
-  it('falls back to the snippet when the note has no title', () => {
-    expect(toNoteListItem(note(), 'reunión de octubre').heading).toBe(
+  it('falls back to the snippet for an untitled note', () => {
+    expect(toWorkspaceListItem(record(), 'reunión de octubre').heading).toBe(
       'reunión de octubre',
     );
   });
 
   it('keeps a completely empty note addressable', () => {
-    const item = toNoteListItem(note(), '');
+    const item = toWorkspaceListItem(record(), '');
 
     expect(item.heading).toBe(NOTE_EMPTY_HEADING);
     expect(item.snippet).toBe('');
   });
 
-  it('formats the creation line in Spanish', () => {
-    expect(toNoteListItem(note(), 'x').notedAt).toBe(
-      'Anotado el 4 de octubre de 2026',
+  it('uses the task copy and placeholder for a non-note record', () => {
+    const item = toWorkspaceListItem(
+      record({ type: 'task', title: 'Llamar al cliente' }),
+      'pedir presupuesto',
     );
+
+    expect(item.heading).toBe('Llamar al cliente');
+    expect(item.when).toBe('Creada el 4 de octubre de 2026');
+    expect(item.type).toBe('task');
+  });
+
+  it('gives an untitled task without text a placeholder instead of a blank row', () => {
+    expect(
+      toWorkspaceListItem(record({ type: 'event' }), '').heading,
+    ).toBe(NOTES_EMPTY_TASK_HEADING);
   });
 });
 
-describe('buildNotesFolders', () => {
+describe('buildTypeFilters', () => {
+  it('lists "Todo" first and marks the active one', () => {
+    const filters = buildTypeFilters('task', { tag: 'compras' });
+
+    expect(filters[0]).toEqual({
+      tag: '',
+      label: NOTES_ALL_LABEL,
+      count: null,
+      href: '/notas?tag=compras',
+      active: false,
+    });
+    expect(filters.find((filter) => filter.tag === 'task')).toEqual({
+      tag: 'task',
+      label: 'Tareas',
+      count: null,
+      href: '/notas?type=task&tag=compras',
+      active: true,
+    });
+  });
+
+  it('keeps the keyword alive across the ladder', () => {
+    const filters = buildTypeFilters('', { q: 'pago' });
+
+    expect(filters[0]?.active).toBe(true);
+    expect(filters[1]?.href).toBe('/notas?type=note&q=pago');
+  });
+});
+
+describe('buildTagFolders', () => {
   const counts: TagCount[] = [
     { tag: 'compras', count: 3 },
     { tag: 'trabajo', count: 1 },
   ];
 
-  it('always lists "Todas las notas" first, without a count', () => {
-    const folders = buildNotesFolders(counts, '');
-
-    expect(folders[0]).toMatchObject({
-      tag: '',
-      label: NOTES_ALL_LABEL,
-      count: null,
-      href: '/notas',
-      active: true,
-    });
-  });
-
-  it('keeps the tag order and its counts, marking the active folder', () => {
-    const folders = buildNotesFolders(counts, 'trabajo');
-
-    expect(folders.slice(1)).toEqual([
+  it('keeps the tag order and its counts, preserving the type filter', () => {
+    expect(buildTagFolders(counts, 'trabajo', { type: 'note' })).toEqual([
       {
         tag: 'compras',
         label: 'compras',
         count: 3,
-        href: '/notas?tag=compras',
+        href: '/notas?type=note&tag=compras',
         active: false,
       },
       {
         tag: 'trabajo',
         label: 'trabajo',
         count: 1,
-        href: '/notas?tag=trabajo',
+        href: '/notas?type=note&tag=trabajo',
         active: true,
       },
     ]);
-    expect(folders[0]?.active).toBe(false);
   });
 
-  it('renders only the synthetic folder when no tag exists yet', () => {
-    expect(buildNotesFolders([], '')).toHaveLength(1);
+  it('renders nothing when there are no tags', () => {
+    expect(buildTagFolders([], '', {})).toEqual([]);
   });
 });
 
@@ -127,19 +160,29 @@ describe('resolveNotesEditorState', () => {
     expect(resolveNotesEditorState(null, false)).toEqual({ kind: 'empty' });
   });
 
-  it('returns the note when one is open', () => {
-    const target = note({ title: 'Acta' });
+  it('returns the record when one is open', () => {
+    const target = record({ title: 'Acta' });
 
     expect(resolveNotesEditorState(target, false)).toEqual({
-      kind: 'note',
-      note: target,
+      kind: 'record',
+      record: target,
     });
   });
 });
 
 describe('notesEmptyMessage', () => {
-  it('distinguishes an empty folder from an empty agenda', () => {
+  it('distinguishes a filtered empty list from an empty workspace', () => {
     expect(notesEmptyMessage({ filtered: false })).toBe(NOTES_EMPTY_MESSAGE);
     expect(notesEmptyMessage({ filtered: true })).toBe(NOTES_EMPTY_TAG_MESSAGE);
+  });
+});
+
+describe('hasActiveFilter', () => {
+  it('is false only when nothing narrows the list', () => {
+    expect(hasActiveFilter({})).toBe(false);
+    expect(hasActiveFilter({ type: '', tag: '', q: '' })).toBe(false);
+    expect(hasActiveFilter({ type: 'note' })).toBe(true);
+    expect(hasActiveFilter({ tag: 'compras' })).toBe(true);
+    expect(hasActiveFilter({ q: 'pago' })).toBe(true);
   });
 });

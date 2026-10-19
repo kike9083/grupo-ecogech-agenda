@@ -617,31 +617,39 @@ export async function loadTagCounts(
 }
 
 /** Query state the `/notas` workspace passes down (spec `note-capture`). */
-export interface NotesListParams {
-  /** Canonical tag the list is filtered to — absent means every note. */
+export interface WorkspaceListParams {
+  /** Narrows to one record type — the workspace's type ladder. */
+  type?: TaskType;
+  /** Canonical tag the list is filtered to — absent means every tag. */
   tag?: string;
+  /** Keyword; when set the read runs as a fulltext search. */
+  q?: string;
   /** Cursor of the page being displayed. */
   cursor?: string;
 }
 
 /**
- * Server-side results for the `/notas` workspace: the caller's notes, newest
- * first, optionally narrowed to one tag. Built on the same scope rules as the
- * home list — admins see every note, members only their own — with `type` set
- * to `note` so tasks, requests and events never leak into the notes column.
+ * Server-side results for the `/notas` workspace: the caller's records, newest
+ * first, optionally narrowed by type, tag or keyword. Built on the same scope
+ * rules as the old home list — admins see everything, members only their own —
+ * and it runs `searchTasks` when a keyword is present, `listTasks` otherwise,
+ * exactly like the home route did before `/` started redirecting here.
  */
-export async function loadNoteTasks(
+export async function loadWorkspaceRecords(
   user: { id: string },
   sessionSecret: string,
   admin: boolean,
   deps: HomeTasksDeps,
-  params: NotesListParams = {},
+  params: WorkspaceListParams = {},
 ): Promise<TaskPage> {
   const api = createTasksApi(deps.databasesFor(sessionSecret), deps.config);
   const scope: TaskScope = admin
-    ? { admin: true, type: 'note' }
-    : { admin: false, ownerId: user.id, type: 'note' };
+    ? { admin: true }
+    : { admin: false, ownerId: user.id };
 
+  if (params.type !== undefined) {
+    scope.type = params.type;
+  }
   if (params.tag !== undefined && params.tag !== '') {
     scope.tag = params.tag;
   }
@@ -649,6 +657,10 @@ export async function loadNoteTasks(
     scope.cursorAfter = params.cursor;
   }
 
+  const term = (params.q ?? '').trim();
+  if (term !== '') {
+    return api.searchTasks(term, scope);
+  }
   return api.listTasks(scope);
 }
 

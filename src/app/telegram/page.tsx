@@ -64,11 +64,6 @@ export default async function TelegramPage() {
     <PageShell
       title="Telegram"
       subtitle="Recordatorios por mensaje directo"
-      actions={
-        <Link href="/" className="btn btn-secondary">
-          Agenda
-        </Link>
-      }
     >
       <section className="card flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-center gap-3">

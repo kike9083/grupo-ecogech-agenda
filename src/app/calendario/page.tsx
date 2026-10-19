@@ -1,8 +1,6 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Databases } from 'node-appwrite';
-import { logout } from '@/actions/auth';
 import { MonthGrid } from '@/components/month-grid';
 import { PageShell } from '@/components/page-shell';
 import { createSessionClient } from '@/lib/appwrite/clients';
@@ -10,7 +8,6 @@ import { isDomainError } from '@/lib/appwrite/errors';
 import { getCurrentUser, getSessionSecret, isAdmin } from '@/lib/appwrite/session';
 import { loadCalendarTasks, type TaskPage } from '@/lib/appwrite/tasks';
 import {
-  CALENDAR_BACK_LABEL,
   CALENDAR_LOAD_ERROR_MESSAGE,
   CALENDAR_LOADING_LABEL,
   CALENDAR_UPDATED_MESSAGE,
@@ -132,18 +129,6 @@ export default async function CalendarioPage({
     <PageShell
       title="Calendario"
       subtitle={`Sesión iniciada como ${user.email}${admin ? ' (administrador)' : ''}`}
-      actions={
-        <>
-          <Link href="/" className="btn btn-secondary">
-            {CALENDAR_BACK_LABEL}
-          </Link>
-          <form action={logout}>
-            <button type="submit" className="btn btn-ghost">
-              Cerrar sesión
-            </button>
-          </form>
-        </>
-      }
     >
       {updated ? (
         <p role="status" className="banner banner-success">

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { Databases, Storage } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/appwrite/clients';
@@ -97,16 +96,6 @@ export default async function EditarPage({
     <PageShell
       title="Editar registro"
       subtitle={`Sesión iniciada como ${user.email}`}
-      actions={
-        <>
-          <Link href="/" className="btn btn-secondary">
-            Lista
-          </Link>
-          <Link href="/calendario" className="btn btn-ghost">
-            Calendario
-          </Link>
-        </>
-      }
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         {justCreated ? (

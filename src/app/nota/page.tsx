@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { NoteForm } from '@/components/note-form';
 import { PageShell } from '@/components/page-shell';
@@ -25,11 +24,6 @@ export default async function NuevaNotaPage() {
     <PageShell
       title="Nueva nota"
       subtitle={`Sesión iniciada como ${user.email}`}
-      actions={
-        <Link href="/" className="btn btn-ghost">
-          Volver
-        </Link>
-      }
     >
       <NoteForm />
     </PageShell>

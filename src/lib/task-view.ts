@@ -223,11 +223,15 @@ export function adminEmptyMessage(options: { filtered: boolean }): string {
 }
 
 /**
- * Builds an `/` URL from the current query state: the cursor carries the
- * next page (design D3 next-link), `q` keeps a keyword search alive across
- * pages, `from`/`to` keep the date range alive (spec `task-search`) and
- * `tag` keeps the tag filter alive (spec `task-tagging`).
+ * Builds a notes-workspace URL from the current query state: the cursor
+ * carries the next page (design D3 next-link), `q` keeps a keyword search
+ * alive across pages, `from`/`to` keep the date range alive (spec
+ * `task-search`) and `tag` keeps the tag filter alive (spec `task-tagging`).
  * Empty pieces are omitted; nothing to carry collapses to the bare route.
+ *
+ * The workspace at `/notas` is the app's list destination now — `/` redirects
+ * there — so a tag chip or a next-page link lands on the list that replaced
+ * the old flat one.
  */
 export function buildListHref(params: {
   cursor?: string;
@@ -254,5 +258,5 @@ export function buildListHref(params: {
   }
 
   const serialized = query.toString();
-  return serialized === '' ? '/' : `/?${serialized}`;
+  return serialized === '' ? '/notas' : `/notas?${serialized}`;
 }

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { PageShell } from '@/components/page-shell';
 import { TaskForm } from '@/components/task-form';
@@ -36,16 +35,6 @@ export default async function NuevaTareaPage({
     <PageShell
       title="Nueva tarea"
       subtitle={`Sesión iniciada como ${user.email}`}
-      actions={
-        <>
-          <Link href="/nota" className="btn btn-secondary">
-            Nueva nota
-          </Link>
-          <Link href="/" className="btn btn-ghost">
-            Volver
-          </Link>
-        </>
-      }
     >
       <TaskForm defaultDate={defaultDate} />
     </PageShell>

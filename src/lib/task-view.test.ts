@@ -238,17 +238,17 @@ describe('descriptionSnippet (spec task-listing → at-a-glance summary)', () =>
 
 describe('buildListHref', () => {
   it('builds the next-page link from the cursor', () => {
-    expect(buildListHref({ cursor: 'doc-20' })).toBe('/?cursor=doc-20');
+    expect(buildListHref({ cursor: 'doc-20' })).toBe('/notas?cursor=doc-20');
   });
 
   it('keeps the keyword in the next-page link so search paginates', () => {
     expect(buildListHref({ cursor: 'doc-20', q: 'pago' })).toBe(
-      '/?q=pago&cursor=doc-20',
+      '/notas?q=pago&cursor=doc-20',
     );
   });
 
-  it('falls back to the bare route when there is nothing to carry', () => {
-    expect(buildListHref({})).toBe('/');
+  it('falls back to the bare workspace route when there is nothing to carry', () => {
+    expect(buildListHref({})).toBe('/notas');
   });
 
   it('carries the inclusive date range across pages (PR9 task 9.1)', () => {
@@ -259,22 +259,22 @@ describe('buildListHref', () => {
         from: '2026-10-01',
         to: '2026-10-15',
       }),
-    ).toBe('/?q=pago&from=2026-10-01&to=2026-10-15&cursor=doc-20');
+    ).toBe('/notas?q=pago&from=2026-10-01&to=2026-10-15&cursor=doc-20');
   });
 
   it('carries only the bound that is set', () => {
-    expect(buildListHref({ from: '2026-10-01' })).toBe('/?from=2026-10-01');
-    expect(buildListHref({ to: '2026-10-15' })).toBe('/?to=2026-10-15');
+    expect(buildListHref({ from: '2026-10-01' })).toBe('/notas?from=2026-10-01');
+    expect(buildListHref({ to: '2026-10-15' })).toBe('/notas?to=2026-10-15');
   });
 
   it('keeps the tag filter alive across pages and search (spec task-tagging)', () => {
-    expect(buildListHref({ tag: 'compras' })).toBe('/?tag=compras');
+    expect(buildListHref({ tag: 'compras' })).toBe('/notas?tag=compras');
     expect(buildListHref({ q: 'pago', tag: 'compras', cursor: 'doc-20' })).toBe(
-      '/?q=pago&tag=compras&cursor=doc-20',
+      '/notas?q=pago&tag=compras&cursor=doc-20',
     );
   });
 
   it('drops an empty tag instead of emitting a blank parameter', () => {
-    expect(buildListHref({ tag: '' })).toBe('/');
+    expect(buildListHref({ tag: '' })).toBe('/notas');
   });
 });

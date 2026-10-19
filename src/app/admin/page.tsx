@@ -1,7 +1,5 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { Databases } from 'node-appwrite';
-import { logout } from '@/actions/auth';
 import { AdminTaskList } from '@/components/admin-task-list';
 import { PageShell } from '@/components/page-shell';
 import { resolveAdminAccess } from '@/lib/admin-gate';
@@ -84,18 +82,6 @@ export default async function AdminPage({
     <PageShell
       title="Administración"
       subtitle={user === null ? 'Grupo Ecotech' : user.email}
-      actions={
-        <>
-          <Link href="/" className="btn btn-secondary">
-            Volver
-          </Link>
-          <form action={logout}>
-            <button type="submit" className="btn btn-ghost">
-              Cerrar sesión
-            </button>
-          </form>
-        </>
-      }
     >
       <p className="meta">
         Todas las tareas del equipo, con la persona responsable de cada una.
