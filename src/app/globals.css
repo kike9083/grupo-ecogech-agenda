@@ -69,6 +69,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Below `md` the fixed bottom navigation owns the last 3.5rem, plus whatever
+   the device reserves for its home indicator. Reserved once here so no page
+   has to remember it. */
+@media (max-width: 767px) {
+  body {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 h1,
 h2,
 h3,
@@ -483,6 +492,11 @@ h4 {
     border-color: var(--color-hairline);
   }
   .btn-tool[aria-pressed='true'] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-ink);
+  }
+  /* The format disclosure reads as "open" the same way an active mark does. */
+  .btn-tool[aria-expanded='true'] {
     background: var(--color-accent-soft);
     color: var(--color-accent-ink);
   }

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Manrope, Inter } from 'next/font/google';
+import { MobileNav } from '@/components/mobile-nav';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
@@ -64,6 +65,9 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${manrope.variable} ${inter.variable} antialiased`}>
         {children}
+        {/* The phone's primary destinations live in a fixed bottom bar; the
+            body reserves its height (see globals.css). */}
+        <MobileNav />
         <PwaRegister />
       </body>
     </html>

@@ -7,15 +7,16 @@ import {
 } from '@/lib/notes-workspace';
 
 /**
- * First column of the workspace (spec `note-capture` → "Notes workspace").
+ * The workspace's filters (spec `note-capture` → "Notes workspace").
  *
- * Two ladders: the record types the workspace can show (Todo, Notas, Tareas,
- * Solicitudes, Citas) and the tags the caller's records carry, most-used
- * first. Both keep the rest of the query alive, so narrowing by type does not
- * drop the keyword or the folder and vice versa.
+ * Two shapes for one model, matching the phone reference design: below `md`
+ * the type ladder and the tag list become horizontally scrollable chip rows
+ * under the header, which keeps the list at the top of the screen instead of
+ * pushing it below two stacked columns; from `md` up they are the vertical
+ * sidebar the three-pane layout was built around.
  *
- * A server component: it renders links and text only, so the workspace keeps
- * its state in the URL (`?type=`, `?tag=`) exactly like the rest of the app.
+ * Both shapes preserve the rest of the query, so narrowing by type never drops
+ * the keyword or the folder and vice versa.
  */
 export function NotesSidebar({
   typeFilters,
@@ -25,40 +26,83 @@ export function NotesSidebar({
   tagFolders: NotesFolder[];
 }) {
   return (
-    <aside className="flex flex-col gap-5 border-hairline bg-surface-sunken/50 p-4 md:min-h-0 md:overflow-y-auto md:border-r">
-      <div>
-        <h2 className="meta font-semibold tracking-wide uppercase">
-          {NOTES_FOLDERS_HEADING}
-        </h2>
-        <ul className="mt-2 flex flex-col gap-1">
+    <>
+      {/* Phone: chips. */}
+      <div className="flex flex-col gap-2 border-b border-hairline p-3 md:hidden">
+        <ul className="flex gap-2 overflow-x-auto pb-1">
           {typeFilters.map((folder) => (
-            <li key={folder.tag === '' ? 'all' : folder.tag}>
-              <FolderLink folder={folder} />
+            <li key={folder.tag === '' ? 'all' : folder.tag} className="shrink-0">
+              <Chip folder={folder} />
             </li>
           ))}
         </ul>
+
+        {tagFolders.length > 0 ? (
+          <ul className="flex gap-2 overflow-x-auto pb-1">
+            {tagFolders.map((folder) => (
+              <li key={folder.tag} className="shrink-0">
+                <Chip folder={folder} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
-      <div className="min-h-0">
-        <h2 className="meta font-semibold tracking-wide uppercase">
-          {NOTES_TAGS_HEADING}
-        </h2>
-        {tagFolders.length === 0 ? (
-          <p className="meta mt-2">{NOTES_NO_TAGS_MESSAGE}</p>
-        ) : (
+      {/* Desktop: the sidebar the grid reserves a column for. */}
+      <aside className="hidden flex-col gap-5 border-hairline bg-surface-sunken/50 p-4 md:flex md:min-h-0 md:overflow-y-auto md:border-r">
+        <div>
+          <h2 className="meta font-semibold tracking-wide uppercase">
+            {NOTES_FOLDERS_HEADING}
+          </h2>
           <ul className="mt-2 flex flex-col gap-1">
-            {tagFolders.map((folder) => (
-              <li key={folder.tag}>
+            {typeFilters.map((folder) => (
+              <li key={folder.tag === '' ? 'all' : folder.tag}>
                 <FolderLink folder={folder} />
               </li>
             ))}
           </ul>
-        )}
-      </div>
-    </aside>
+        </div>
+
+        <div className="min-h-0">
+          <h2 className="meta font-semibold tracking-wide uppercase">
+            {NOTES_TAGS_HEADING}
+          </h2>
+          {tagFolders.length === 0 ? (
+            <p className="meta mt-2">{NOTES_NO_TAGS_MESSAGE}</p>
+          ) : (
+            <ul className="mt-2 flex flex-col gap-1">
+              {tagFolders.map((folder) => (
+                <li key={folder.tag}>
+                  <FolderLink folder={folder} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
 
+/** A filter as a pill, for the phone's chip rows. */
+function Chip({ folder }: { folder: NotesFolder }) {
+  return (
+    <Link
+      href={folder.href}
+      aria-current={folder.active ? 'true' : undefined}
+      className={`badge ${
+        folder.active ? 'badge-accent border border-accent' : 'badge-tag'
+      }`}
+    >
+      {folder.label}
+      {folder.count === null ? null : (
+        <span className="opacity-70">{folder.count}</span>
+      )}
+    </Link>
+  );
+}
+
+/** A filter as a full-width row, for the desktop sidebar. */
 function FolderLink({ folder }: { folder: NotesFolder }) {
   return (
     <Link

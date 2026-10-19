@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { logout } from '@/actions/auth';
+import { AppNav } from '@/components/app-nav';
 import { getCurrentUser, isAdmin } from '@/lib/appwrite/session';
 
 /**
@@ -59,36 +59,7 @@ export async function AppHeader() {
           </span>
         </Link>
 
-        <nav className="flex flex-wrap items-center justify-end gap-2">
-          <Link href="/nueva" className="btn btn-primary">
-            Nueva tarea
-          </Link>
-          <Link href="/nota" className="btn btn-secondary">
-            Nueva nota
-          </Link>
-          <Link href="/notas" className="btn btn-secondary">
-            Notas
-          </Link>
-          <Link href="/calendario" className="btn btn-secondary">
-            Calendario
-          </Link>
-          <Link href="/etiquetas" className="btn btn-secondary">
-            Etiquetas
-          </Link>
-          <Link href="/telegram" className="btn btn-secondary">
-            Telegram
-          </Link>
-          {admin ? (
-            <Link href="/admin" className="btn btn-secondary">
-              Administración
-            </Link>
-          ) : null}
-          <form action={logout}>
-            <button type="submit" className="btn btn-ghost">
-              Cerrar sesión
-            </button>
-          </form>
-        </nav>
+        <AppNav admin={admin} />
       </div>
     </header>
   );
